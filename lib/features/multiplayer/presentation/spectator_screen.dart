@@ -57,10 +57,10 @@ class SpectatorScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       child: Row(
                         children: <Widget>[
-                          SizedBox(
+                          const SizedBox(
                             width: 14,
                             height: 14,
-                            child: const CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                           const SizedBox(width: 8),
                           const Text('⚠️ Reconnecting...'),
@@ -74,7 +74,7 @@ class SpectatorScreen extends ConsumerWidget {
                   child: Row(
                     children: <Widget>[
                       const Spacer(),
-                      _LiveViewBadge(),
+                      const _LiveViewBadge(),
                     ],
                   ),
                 ),
@@ -117,6 +117,8 @@ class SpectatorScreen extends ConsumerWidget {
 }
 
 class _LiveViewBadge extends StatelessWidget {
+  const _LiveViewBadge();
+
   @override
   Widget build(BuildContext context) {
     return Container(

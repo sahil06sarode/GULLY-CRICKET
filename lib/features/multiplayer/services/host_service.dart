@@ -88,6 +88,11 @@ class HostService {
     _server = null;
   }
 
+  Future<void> dispose() async {
+    await stopServer();
+    await _connectedClientsController.close();
+  }
+
   void _onClientConnected(WebSocketChannel channel) {
     _clients.add(channel);
     _connectedClientsController.add(_clients.length);
@@ -192,8 +197,7 @@ class HostService {
 final hostServiceProvider = Provider<HostService>((ref) {
   final service = HostService();
   ref.onDispose(() {
-    unawaited(service.stopServer());
-    unawaited(service._connectedClientsController.close());
+    unawaited(service.dispose());
   });
   return service;
 });
