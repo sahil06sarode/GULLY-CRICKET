@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/ads/widgets/banner_ad_widget.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/match_setup/presentation/match_setup_screen.dart';
 import '../features/match_setup/presentation/rules_config_screen.dart';
@@ -9,7 +8,9 @@ import '../features/match_setup/presentation/team_setup_screen.dart';
 import '../features/multiplayer/presentation/host_lobby_screen.dart';
 import '../features/multiplayer/presentation/join_screen.dart';
 import '../features/multiplayer/presentation/spectator_screen.dart';
+import '../features/result/presentation/match_history_screen.dart';
 import '../features/result/presentation/result_screen.dart';
+import '../features/scoring/domain/models/match_model.dart';
 import '../features/scoring/presentation/live_score_screen.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -63,37 +64,21 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/result',
       name: 'result',
-      builder: (BuildContext context, GoRouterState state) =>
-          const ResultScreen(),
+      builder: (BuildContext context, GoRouterState state) {
+        final extra = state.extra;
+        if (extra is Map<String, dynamic>) {
+          return ResultScreen(
+            matchOverride: extra['match'] as MatchModel?,
+            readOnly: (extra['readOnly'] as bool?) ?? false,
+          );
+        }
+        return const ResultScreen();
+      },
     ),
     GoRoute(
       path: '/history',
       name: 'history',
-      builder: (BuildContext context, GoRouterState state) =>
-          const MatchHistoryScreen(),
+      builder: (BuildContext context, GoRouterState state) => const MatchHistoryScreen(),
     ),
   ],
 );
-
-class _RoutePlaceholder extends StatelessWidget {
-  const _RoutePlaceholder(this.label, {this.showBanner = false});
-
-  final String label;
-  final bool showBanner;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(child: Text(label)),
-      bottomNavigationBar: showBanner ? const SafeArea(top: false, child: BannerAdWidget()) : null,
-    );
-  }
-}
-
-class MatchHistoryScreen extends StatelessWidget {
-  const MatchHistoryScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) =>
-      const _RoutePlaceholder('MatchHistoryScreen', showBanner: true);
-}

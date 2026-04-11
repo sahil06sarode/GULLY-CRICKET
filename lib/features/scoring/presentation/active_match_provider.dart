@@ -99,6 +99,10 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     return updated;
   }
 
+  void clearMatch() {
+    state = null;
+  }
+
   Future<void> _persist(MatchModel match) async {
     await _ref.read(matchListProvider.notifier).saveMatch(match);
   }
