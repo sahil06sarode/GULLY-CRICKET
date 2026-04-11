@@ -59,11 +59,11 @@ class Ball extends HiveObject {
   bool get isLegalBall => !isWide && !isNoBall;
 
   String get displayChar {
-    if (isWide) return 'Wd';
-    if (isNoBall) return 'Nb';
+    if (isWide) return runsScored > 0 ? 'Wd+$runsScored' : 'Wd';
+    if (isNoBall) return runsScored > 0 ? 'Nb+$runsScored' : 'Nb';
     if (isWicket) return 'W';
-    if (isBye) return 'B';
-    if (isLegBye) return 'Lb';
+    if (isBye) return runsScored > 0 ? 'B+$runsScored' : 'B';
+    if (isLegBye) return runsScored > 0 ? 'Lb+$runsScored' : 'Lb';
     if (runsScored == 0) return '.';
     return '$runsScored';
   }
