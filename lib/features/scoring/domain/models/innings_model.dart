@@ -62,8 +62,8 @@ class Innings extends HiveObject {
     var ballExtras = 0;
     if (ball.isWide || ball.isNoBall) {
       ballExtras += 1;
-      ballExtras += ball.runsScored;
-    } else if (ball.isBye || ball.isLegBye) {
+    }
+    if (ball.isBye || ball.isLegBye) {
       ballExtras += ball.runsScored;
     }
     return sum + ballExtras;
