@@ -1,14 +1,11 @@
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../../core/constants/hive_keys.dart';
+import '../../../core/constants/match_status.dart';
 import '../../scoring/domain/models/match_model.dart';
 
 class HiveService {
   const HiveService();
-
-  static const int _statusLiveFirstInnings = 2;
-  static const int _statusLiveSecondInnings = 3;
-  static const int _statusCompleted = 4;
 
   Box<MatchModel> get _matchBox => Hive.box<MatchModel>(HiveKeys.matchBox);
 
@@ -31,12 +28,14 @@ class HiveService {
   }
 
   List<MatchModel> getCompletedMatches() {
-    return _matchBox.values.where((m) => m.status == _statusCompleted).toList();
+    return _matchBox.values.where((m) => m.status == MatchStatus.completed).toList();
   }
 
   List<MatchModel> getLiveMatches() {
     return _matchBox.values
-        .where((m) => m.status == _statusLiveFirstInnings || m.status == _statusLiveSecondInnings)
+        .where(
+          (m) => m.status == MatchStatus.liveFirstInnings || m.status == MatchStatus.liveSecondInnings,
+        )
         .toList();
   }
 }
