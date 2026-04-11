@@ -57,6 +57,21 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     return updated;
   }
 
+  Future<MatchModel?> swapStrike() async {
+    final match = state;
+    final innings = match?.currentInnings;
+    if (match == null || innings == null) return null;
+    final striker = innings.currentBatsmanId;
+    final nonStriker = innings.currentNonStrikerId;
+    if (striker == null || nonStriker == null) return null;
+
+    var updated = _engine.setBatsman(match, nonStriker, true);
+    updated = _engine.setBatsman(updated, striker, false);
+    state = updated;
+    await _persist(updated);
+    return updated;
+  }
+
   Future<MatchModel?> retireBatsman(String playerId, {bool isHurt = false}) async {
     final match = state;
     if (match == null) return null;

@@ -644,8 +644,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                 final strikerId = innings.currentBatsmanId;
                 final nonId = innings.currentNonStrikerId;
                 if (strikerId == null || nonId == null) return;
-                await ref.read(activeMatchProvider.notifier).setBatsman(nonId, isStriker: true);
-                await ref.read(activeMatchProvider.notifier).setBatsman(strikerId, isStriker: false);
+                await ref.read(activeMatchProvider.notifier).swapStrike();
                 await _broadcastIfHosting();
               },
               onSettings: () async {
