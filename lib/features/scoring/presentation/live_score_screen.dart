@@ -19,6 +19,7 @@ import '../domain/models/ball_model.dart';
 import '../domain/models/gully_rules_model.dart';
 import '../domain/models/innings_model.dart';
 import '../domain/models/match_model.dart';
+import '../domain/models/partnership_model.dart';
 import '../domain/models/player_model.dart';
 import 'active_match_provider.dart';
 import 'select_batsman_screen.dart';
@@ -529,7 +530,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     final maidens =
         overs.where((over) => over.isComplete(match.rules.ballsPerOver) && over.runsInOver == 0).length;
     final oversText = '${legalBalls ~/ match.rules.ballsPerOver}.${legalBalls % match.rules.ballsPerOver}';
-    final economyRate = legalBalls == 0 ? 0 : (runs / legalBalls) * match.rules.ballsPerOver;
+    final economyRate = legalBalls == 0 ? 0.0 : (runs / legalBalls) * match.rules.ballsPerOver;
     return _BowlerFigures(
       oversText: oversText,
       maidens: maidens,
