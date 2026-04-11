@@ -58,9 +58,16 @@ class Innings extends HiveObject {
     return legalBallsCount() / ballsPerOver;
   }
 
-  int get extras => allBalls
-      .where((ball) => ball.isWide || ball.isNoBall || ball.isBye || ball.isLegBye)
-      .fold(0, (sum, ball) => sum + ball.runsScored);
+  int get extras => allBalls.fold(0, (sum, ball) {
+    var ballExtras = 0;
+    if (ball.isWide || ball.isNoBall) {
+      ballExtras += 1;
+      ballExtras += ball.runsScored;
+    } else if (ball.isBye || ball.isLegBye) {
+      ballExtras += ball.runsScored;
+    }
+    return sum + ballExtras;
+  });
 
   Innings copyWith({
     String? id,
