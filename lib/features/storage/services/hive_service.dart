@@ -6,6 +6,10 @@ import '../../scoring/domain/models/match_model.dart';
 class HiveService {
   const HiveService();
 
+  static const int _statusLiveFirstInnings = 2;
+  static const int _statusLiveSecondInnings = 3;
+  static const int _statusCompleted = 4;
+
   Box<MatchModel> get _matchBox => Hive.box<MatchModel>(HiveKeys.matchBox);
 
   Future<void> saveMatch(MatchModel match) async {
@@ -27,10 +31,12 @@ class HiveService {
   }
 
   List<MatchModel> getCompletedMatches() {
-    return _matchBox.values.where((m) => m.status == 4).toList();
+    return _matchBox.values.where((m) => m.status == _statusCompleted).toList();
   }
 
   List<MatchModel> getLiveMatches() {
-    return _matchBox.values.where((m) => m.status == 2 || m.status == 3).toList();
+    return _matchBox.values
+        .where((m) => m.status == _statusLiveFirstInnings || m.status == _statusLiveSecondInnings)
+        .toList();
   }
 }
