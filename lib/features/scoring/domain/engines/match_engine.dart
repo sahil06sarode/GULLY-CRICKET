@@ -9,7 +9,7 @@ import 'rule_engine.dart';
 class MatchEngine {
   const MatchEngine();
 
-  final RuleEngine _ruleEngine = const RuleEngine();
+  static const RuleEngine _ruleEngine = RuleEngine();
 
   // Apply one ball to the match — returns updated MatchModel (immutable).
   MatchModel recordBall(MatchModel match, Ball ball) {
