@@ -56,14 +56,14 @@ class SpectatorScreen extends ConsumerWidget {
                       color: Colors.orange.shade900,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       child: Row(
-                        children: const <Widget>[
+                        children: <Widget>[
                           SizedBox(
                             width: 14,
                             height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: const CircularProgressIndicator(strokeWidth: 2),
                           ),
-                          SizedBox(width: 8),
-                          Text('⚠️ Reconnecting...'),
+                          const SizedBox(width: 8),
+                          const Text('⚠️ Reconnecting...'),
                         ],
                       ),
                     );
