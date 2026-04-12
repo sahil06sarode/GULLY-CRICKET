@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/match_status.dart';
+import '../../notifications/notification_service.dart';
 import '../../storage/services/match_repository.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
 import '../domain/models/ball_model.dart';
 import '../domain/models/match_model.dart';
+import '../domain/models/player_model.dart';
 
 final activeMatchProvider = StateNotifierProvider<ActiveMatchNotifier, MatchModel?>((ref) {
   return ActiveMatchNotifier(ref);
@@ -29,6 +31,7 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     final updated = _engine.recordBall(match, ball);
     state = updated;
     await _persist(updated);
+    await _updateLiveNotification(ball, updated);
     return updated;
   }
 
@@ -98,6 +101,13 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     final updated = _engine.completeMatch(match);
     state = updated;
     await _persist(updated);
+    final notif = _ref.read(notificationServiceProvider);
+    await notif.cancelLiveScore();
+    final winner = updated.winnerTeamName;
+    final description = updated.winDescription;
+    if (winner != null && description != null) {
+      await notif.showMatchResult(winner, description);
+    }
     return updated;
   }
 
@@ -128,5 +138,65 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
 
   Future<void> _persist(MatchModel match) async {
     await _ref.read(matchListProvider.notifier).saveMatch(match);
+  }
+
+  Future<void> _updateLiveNotification(Ball ball, MatchModel match) async {
+    final innings = match.currentInnings;
+    if (innings == null) return;
+    final notif = _ref.read(notificationServiceProvider);
+    final batsmanName = _playerName(match, ball.batsmanId);
+    final dismissedName =
+        ball.dismissedPlayerId == null ? batsmanName : _playerName(match, ball.dismissedPlayerId);
+
+    var event = '';
+    final isBoundaryScoringBall = !ball.isWide && !ball.isNoBall && !ball.isBye && !ball.isLegBye;
+    if (ball.runsScored == 4 && isBoundaryScoringBall) {
+      event = '🏏 FOUR! $batsmanName hits a boundary';
+    } else if (ball.runsScored == 6 && isBoundaryScoringBall) {
+      event = '💥 SIX! $batsmanName clears the boundary';
+    }
+    if (ball.isWicket) {
+      event = '🎯 WICKET! $dismissedName is OUT';
+    }
+
+    final legalBalls = innings.legalBallsCount();
+    final ballsPerOver = match.rules.ballsPerOver;
+    final totalBalls = match.rules.totalOvers * ballsPerOver;
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final battingTeam = innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name;
+    final crr = legalBalls == 0 ? 0.0 : (innings.totalRuns / legalBalls) * ballsPerOver;
+    final target = innings.inningsNumber == 2 ? match.target : null;
+    final runsNeeded = target == null ? 0 : (target - innings.totalRuns).clamp(0, target);
+    final rrr = target == null || ballsRemaining == 0 ? null : ((runsNeeded / ballsRemaining) * ballsPerOver);
+    final firstInnings = match.firstInnings;
+
+    await notif.showLiveScore(
+      team1Name: battingTeam,
+      team1Score: '${innings.totalRuns}/${innings.wickets}',
+      team1Overs: _formatOvers(legalBalls, ballsPerOver),
+      team2Score:
+          innings.inningsNumber == 1 ? null : firstInnings == null ? null : '${firstInnings.totalRuns}/${firstInnings.wickets}',
+      team2Overs: innings.inningsNumber == 1 ? null : 'Target ${match.target ?? '-'}',
+      currentEvent: event,
+      battingTeam: battingTeam,
+      crr: crr.toStringAsFixed(1),
+      rrr: rrr?.toStringAsFixed(1),
+    );
+
+    if (event.isNotEmpty) {
+      await notif.showMatchEvent('Gully Cricket', event);
+    }
+  }
+
+  String _formatOvers(int legalBalls, int ballsPerOver) {
+    return '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver} ov';
+  }
+
+  String _playerName(MatchModel match, String? playerId) {
+    if (playerId == null) return 'Batter';
+    for (final player in <Player>[...match.team1Players, ...match.team2Players]) {
+      if (player.id == playerId) return player.name;
+    }
+    return 'Batter';
   }
 }
