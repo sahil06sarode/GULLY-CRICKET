@@ -235,7 +235,6 @@ class _WinBanner extends StatelessWidget {
               ),
             ),
           ],
-        ),
         ).animate().shimmer(color: Colors.white24, duration: 1200.ms),
       ),
     );

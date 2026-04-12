@@ -254,12 +254,11 @@ class _TeamSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-             Text(
-               teamName,
-               style: Theme.of(context).textTheme.titleMedium,
-               overflow: TextOverflow.ellipsis,
-               maxLines: 1,
-               softWrap: false,
+              Text(
+                teamName,
+                style: Theme.of(context).textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             if (savedPlayers.isNotEmpty) ...<Widget>[
               const SizedBox(height: 10),
