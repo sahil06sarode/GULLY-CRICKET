@@ -13,6 +13,7 @@ import '../../../core/constants/match_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../audio/sound_service.dart';
 import '../../multiplayer/services/host_service.dart';
+import '../../overlay/overlay_service.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
 import '../domain/models/ball_model.dart';
@@ -107,6 +108,69 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     if (mounted) {
       setState(() => _scoreboardStyle = style);
     }
+  }
+
+  Future<void> _toggleFloatingOverlay() async {
+    final active = ref.read(overlayActiveProvider);
+    if (active) {
+      await OverlayService.closeOverlay();
+      ref.read(overlayActiveProvider.notifier).state = false;
+      if (mounted) _showTopSnackBar('Floating score disabled');
+      return;
+    }
+
+    final granted = await OverlayService.hasPermission();
+    if (!granted) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Overlay Permission Needed'),
+          content: const Text(
+            'To float score above other apps, allow "Display over other apps" for Gully Cricket.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await OverlayService.requestPermission();
+                if (mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final data = _overlayScoreData(ref.read(activeMatchProvider));
+    if (data == null) return;
+    await OverlayService.showOverlay(data);
+    ref.read(overlayActiveProvider.notifier).state = true;
+    await SystemNavigator.pop();
+  }
+
+  OverlayScoreData? _overlayScoreData(MatchModel? match) {
+    if (match == null) return null;
+    final innings = match.currentInnings;
+    if (innings == null) return null;
+    final batting = innings.battingTeamId == 'team1' ? match.team1Players : match.team2Players;
+    final striker = _findPlayer(batting, innings.currentBatsmanId);
+    final nonStriker = _findPlayer(batting, innings.currentNonStrikerId);
+    return OverlayScoreData(
+      battingTeam: innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name,
+      score: '${innings.totalRuns}/${innings.wickets}',
+      overs: _oversText(innings, match),
+      crr: _currentRunRate(innings, match).toStringAsFixed(1),
+      rrr: innings.inningsNumber == 2 ? _requiredRunRate(innings, match).toStringAsFixed(1) : null,
+      batsmenInfo:
+          '${striker?.name ?? 'Striker'} ${striker?.runsScored ?? 0}* · ${nonStriker?.name ?? 'Non-striker'} ${nonStriker?.runsScored ?? 0}',
+      currentEvent: '',
+    );
   }
 
   Future<void> _handleRun(int runs) async {
@@ -1003,6 +1067,16 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Float score',
+                          onPressed: _toggleFloatingOverlay,
+                          icon: Icon(
+                            ref.watch(overlayActiveProvider)
+                                ? Icons.picture_in_picture_alt
+                                : Icons.picture_in_picture,
                           ),
                         ),
                         const SizedBox(width: 4),

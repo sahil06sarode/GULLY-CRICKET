@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/match_status.dart';
 import '../../notifications/notification_service.dart';
+import '../../overlay/overlay_service.dart';
 import '../../storage/services/match_repository.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
@@ -108,6 +109,8 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     if (winner != null && description != null) {
       await notif.showMatchResult(winner, description);
     }
+    await OverlayService.closeOverlay();
+    _ref.read(overlayActiveProvider.notifier).state = false;
     return updated;
   }
 
@@ -186,6 +189,7 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     if (event.isNotEmpty) {
       await notif.showMatchEvent('Gully Cricket', event);
     }
+    await _updateOverlay(match, event);
   }
 
   String _formatOvers(int legalBalls, int ballsPerOver) {
@@ -198,5 +202,47 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
       if (player.id == playerId) return player.name;
     }
     return 'Batter';
+  }
+
+  Future<void> _updateOverlay(MatchModel match, String event) async {
+    if (!_ref.read(overlayActiveProvider)) return;
+    final innings = match.currentInnings;
+    if (innings == null) return;
+
+    final legalBalls = innings.legalBallsCount();
+    final ballsPerOver = match.rules.ballsPerOver;
+    final totalBalls = match.rules.totalOvers * ballsPerOver;
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final battingTeam = innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name;
+    final crr = legalBalls == 0 ? 0.0 : (innings.totalRuns / legalBalls) * ballsPerOver;
+    final target = innings.inningsNumber == 2 ? match.target : null;
+    final runsNeeded = target == null ? 0 : (target - innings.totalRuns).clamp(0, target);
+    final rrr = target == null || ballsRemaining == 0 ? null : ((runsNeeded / ballsRemaining) * ballsPerOver);
+    final batters = innings.battingTeamId == 'team1' ? match.team1Players : match.team2Players;
+    final striker = _findPlayerInList(batters, innings.currentBatsmanId);
+    final nonStriker = _findPlayerInList(batters, innings.currentNonStrikerId);
+
+    final batsmenInfo =
+        '${striker?.name ?? 'Striker'} ${striker?.runsScored ?? 0}* · ${nonStriker?.name ?? 'Non-striker'} ${nonStriker?.runsScored ?? 0}';
+
+    await OverlayService.updateOverlay(
+      OverlayScoreData(
+        battingTeam: battingTeam,
+        score: '${innings.totalRuns}/${innings.wickets}',
+        overs: '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver}',
+        crr: crr.toStringAsFixed(1),
+        rrr: rrr?.toStringAsFixed(1),
+        batsmenInfo: batsmenInfo,
+        currentEvent: event,
+      ),
+    );
+  }
+
+  Player? _findPlayerInList(List<Player> players, String? playerId) {
+    if (playerId == null) return null;
+    for (final player in players) {
+      if (player.id == playerId) return player;
+    }
+    return null;
   }
 }
