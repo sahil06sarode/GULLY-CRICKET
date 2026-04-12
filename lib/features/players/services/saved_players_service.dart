@@ -109,22 +109,18 @@ class SavedPlayersNotifier extends StateNotifier<List<SavedPlayer>> {
 
   Future<void> savePlayer(String name) async {
     await _service.savePlayer(name);
-    _reload();
   }
 
   Future<void> deletePlayer(String id) async {
     await _service.deletePlayer(id);
-    _reload();
   }
 
   Future<void> toggleFavorite(String id) async {
     await _service.toggleFavorite(id);
-    _reload();
   }
 
   Future<void> renamePlayer(String id, String newName) async {
     await _service.renamePlayer(id, newName);
-    _reload();
   }
 
   @override

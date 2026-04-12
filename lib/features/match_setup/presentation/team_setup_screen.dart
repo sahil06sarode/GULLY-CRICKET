@@ -122,7 +122,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
     }
   }
 
-  Future<void> _next() async {
+  Future<void> _savePlayersAndNavigate() async {
     final team1 = _team1Controllers
         .asMap()
         .entries
@@ -192,7 +192,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
                 SizedBox(
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _next,
+                    onPressed: _savePlayersAndNavigate,
                     child: const Text('Next: Set Rules →'),
                   ),
                 ),

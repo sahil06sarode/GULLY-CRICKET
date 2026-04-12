@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 
 part 'saved_player_model.g.dart';
 
+// Existing scoring models occupy typeIds 0-6; SavedPlayer uses 7.
 @HiveType(typeId: 7)
 class SavedPlayer extends HiveObject {
   @HiveField(0)
