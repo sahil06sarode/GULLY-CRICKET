@@ -183,10 +183,10 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
                 ),
                 if (_team1PlayerCount != _team2PlayerCount)
                   Padding(
-                    padding: EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(top: 8),
                     child: Text(
                       '⚡ Uneven match: $_team1PlayerCount vs $_team2PlayerCount',
-                      style: TextStyle(color: AppColors.accentGold, fontSize: 12),
+                      style: const TextStyle(color: AppColors.accentGold, fontSize: 12),
                     ),
                   ),
                 SwitchListTile(
