@@ -292,6 +292,12 @@ class _PotmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    void openPlayer(String? name) {
+      final trimmed = name?.trim() ?? '';
+      if (trimmed.isEmpty) return;
+      context.push('/player/${Uri.encodeComponent(trimmed)}');
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -300,12 +306,26 @@ class _PotmCard extends StatelessWidget {
           children: <Widget>[
             Text('Player of the Match', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 10),
-            Text(
-              'Highest scorer: ${topScorer?.name ?? '-'} | ${topScorer?.runsScored ?? 0}(${topScorer?.ballsFaced ?? 0}) | SR ${(topScorer?.strikeRate ?? 0).toStringAsFixed(1)}',
+            InkWell(
+              onTap: () => openPlayer(topScorer?.name),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  'Highest scorer: ${topScorer?.name ?? '-'} | ${topScorer?.runsScored ?? 0}(${topScorer?.ballsFaced ?? 0}) | SR ${(topScorer?.strikeRate ?? 0).toStringAsFixed(1)}',
+                ),
+              ),
             ),
             const SizedBox(height: 6),
-            Text(
-              'Best bowler: ${bestBowler?.name ?? '-'} | ${bestBowler?.wicketsTaken ?? 0}/${bestBowler?.runsConceded ?? 0} | Eco ${(bestBowler?.economy ?? 0).toStringAsFixed(1)}',
+            InkWell(
+              onTap: () => openPlayer(bestBowler?.name),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  'Best bowler: ${bestBowler?.name ?? '-'} | ${bestBowler?.wicketsTaken ?? 0}/${bestBowler?.runsConceded ?? 0} | Eco ${(bestBowler?.economy ?? 0).toStringAsFixed(1)}',
+                ),
+              ),
             ),
           ],
         ),
@@ -368,6 +388,7 @@ class _ScorecardExpansion extends StatelessWidget {
                                 maxLines: 1,
                                 softWrap: false,
                               ),
+                              onTap: () => context.push('/player/${Uri.encodeComponent(p.name)}'),
                             ),
                             DataCell(Text('${p.runsScored}')),
                             DataCell(Text('${p.ballsFaced}')),
@@ -411,6 +432,7 @@ class _ScorecardExpansion extends StatelessWidget {
                                   maxLines: 1,
                                   softWrap: false,
                                 ),
+                                onTap: () => context.push('/player/${Uri.encodeComponent(p.name)}'),
                               ),
                               DataCell(Text(figures.oversText)),
                               DataCell(Text('${figures.maidens}')),

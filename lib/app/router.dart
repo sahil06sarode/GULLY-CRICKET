@@ -11,13 +11,13 @@ import '../features/multiplayer/presentation/host_lobby_screen.dart';
 import '../features/multiplayer/presentation/join_screen.dart';
 import '../features/multiplayer/presentation/spectator_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
+import '../features/players/presentation/player_dashboard_screen.dart';
 import '../features/players/presentation/saved_players_screen.dart';
 import '../features/result/presentation/match_history_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/scoring/domain/models/match_model.dart';
 import '../features/scoring/presentation/live_score_screen.dart';
 import '../features/teams/presentation/create_team_screen.dart';
-import '../features/teams/presentation/player_dashboard_screen.dart';
 import '../features/teams/presentation/team_dashboard_screen.dart';
 import '../features/teams/presentation/teams_screen.dart';
 
