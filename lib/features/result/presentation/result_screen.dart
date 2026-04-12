@@ -117,13 +117,13 @@ class _ResultScreenState extends ConsumerState<ResultScreen> {
               const SizedBox(height: 12),
               _ScorecardExpansion(match: match, innings: innings),
               const SizedBox(height: 16),
-              SizedBox(
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: () => context.push('/report/${match.id}'),
-                  child: const Text('View Full Report →'),
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: () => context.push('/report/${match.id}'),
+                    child: const Text('📊 Full Match Report →'),
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               if (!widget.readOnly) ...<Widget>[
                 SizedBox(

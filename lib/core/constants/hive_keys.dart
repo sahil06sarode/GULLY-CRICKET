@@ -7,4 +7,6 @@ class HiveKeys {
   static const teamsBox = 'teams';
   static const onboardingCompleted = 'onboarding_completed';
   static const hotspotGuideShown = 'hotspot_guide_shown';
+  static const notifEnabled = 'notif_enabled';
+  static const overlayEnabled = 'overlay_enabled';
 }

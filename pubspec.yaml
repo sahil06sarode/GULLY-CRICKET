@@ -33,6 +33,7 @@ dependencies:
   flutter_local_notifications: ^17.0.0
   flutter_foreground_task: ^8.0.0
   system_alert_window: ^0.3.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

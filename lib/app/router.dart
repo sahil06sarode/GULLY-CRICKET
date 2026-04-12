@@ -19,6 +19,7 @@ import '../features/result/presentation/match_history_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/scoring/domain/models/match_model.dart';
 import '../features/scoring/presentation/live_score_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
 import '../features/teams/presentation/create_team_screen.dart';
 import '../features/teams/presentation/team_dashboard_screen.dart';
 import '../features/teams/presentation/teams_screen.dart';
@@ -147,6 +148,11 @@ final GoRouter appRouter = GoRouter(
       path: '/players',
       name: 'players',
       builder: (BuildContext context, GoRouterState state) => const SavedPlayersScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      name: 'settings',
+      builder: (BuildContext context, GoRouterState state) => const SettingsScreen(),
     ),
     GoRoute(
       path: '/player/:playerName',

@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
+import '../../../core/constants/hive_keys.dart';
 import '../../../core/constants/match_status.dart';
 import '../../notifications/notification_service.dart';
 import '../../overlay/overlay_service.dart';
+import '../../players/services/saved_players_service.dart';
 import '../../storage/services/match_repository.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
@@ -102,6 +105,13 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
     final updated = _engine.completeMatch(match);
     state = updated;
     await _persist(updated);
+    for (final player in <Player>[...updated.team1Players, ...updated.team2Players]) {
+      await _ref.read(savedPlayersServiceProvider).updateCareerStats(
+        player.name,
+        player.runsScored,
+        player.wicketsTaken,
+      );
+    }
     final notif = _ref.read(notificationServiceProvider);
     await notif.cancelLiveScore();
     final winner = updated.winnerTeamName;
@@ -144,6 +154,7 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
   }
 
   Future<void> _updateLiveNotification(Ball ball, MatchModel match) async {
+    if (!_notificationsEnabled()) return;
     final innings = match.currentInnings;
     if (innings == null) return;
     final notif = _ref.read(notificationServiceProvider);
@@ -190,6 +201,11 @@ class ActiveMatchNotifier extends StateNotifier<MatchModel?> {
       await notif.showMatchEvent('Gully Cricket', event);
     }
     await _updateOverlay(match, event);
+  }
+
+  bool _notificationsEnabled() {
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    return (settings.get(HiveKeys.notifEnabled, defaultValue: true) as bool?) ?? true;
   }
 
   String _formatOvers(int legalBalls, int ballsPerOver) {

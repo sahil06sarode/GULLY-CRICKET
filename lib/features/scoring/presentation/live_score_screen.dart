@@ -13,6 +13,7 @@ import '../../../core/constants/match_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../audio/sound_service.dart';
 import '../../multiplayer/services/host_service.dart';
+import '../../notifications/notification_service.dart';
 import '../../overlay/overlay_service.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
@@ -51,11 +52,14 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
   bool _sheetOpen = false;
   bool _showWicketFlash = false;
   String _scoreboardStyle = 'simple';
+  bool _notifEnabled = true;
+  bool _overlayEnabled = false;
 
   @override
   void initState() {
     super.initState();
     _loadScoreboardStyle();
+    _loadSyncPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapIfNeeded());
   }
 
@@ -90,6 +94,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
       active = initialized;
     }
     await _ensureReadyForBall(active);
+    await _showLiveNotificationSnapshot(active);
   }
 
   void _loadScoreboardStyle() {
@@ -98,6 +103,12 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     if (stored == 'simple' || stored == 'official') {
       _scoreboardStyle = stored;
     }
+  }
+
+  void _loadSyncPreferences() {
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    _notifEnabled = (settings.get(HiveKeys.notifEnabled, defaultValue: true) as bool?) ?? true;
+    _overlayEnabled = (settings.get(HiveKeys.overlayEnabled, defaultValue: false) as bool?) ?? false;
   }
 
   Future<void> _setScoreboardStyle(String style) async {
@@ -115,6 +126,10 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     if (active) {
       await OverlayService.closeOverlay();
       ref.read(overlayActiveProvider.notifier).state = false;
+      await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, false);
+      if (mounted) {
+        setState(() => _overlayEnabled = false);
+      }
       if (mounted) _showTopSnackBar('Floating score disabled');
       return;
     }
@@ -151,8 +166,71 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     if (data == null) return;
     await OverlayService.showOverlay(data);
     ref.read(overlayActiveProvider.notifier).state = true;
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, true);
+    if (mounted) {
+      setState(() => _overlayEnabled = true);
+    }
     // This pops the app activity on Android so the floating overlay remains visible over other apps.
     await SystemNavigator.pop();
+  }
+
+  Future<void> _setNotifEnabled(bool enabled) async {
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.notifEnabled, enabled);
+    if (mounted) {
+      setState(() => _notifEnabled = enabled);
+    }
+    final notif = ref.read(notificationServiceProvider);
+    if (!enabled) {
+      await notif.cancelLiveScore();
+      return;
+    }
+    final match = ref.read(activeMatchProvider);
+    if (match != null) {
+      await _showLiveNotificationSnapshot(match);
+    }
+  }
+
+  Future<void> _setOverlayEnabled(bool enabled) async {
+    if (enabled) {
+      await _toggleFloatingOverlay();
+      return;
+    }
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, false);
+    if (mounted) {
+      setState(() => _overlayEnabled = false);
+    }
+    final active = ref.read(overlayActiveProvider);
+    if (active) {
+      await OverlayService.closeOverlay();
+      ref.read(overlayActiveProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> _showLiveNotificationSnapshot(MatchModel match) async {
+    if (!_notifEnabled) return;
+    final innings = match.currentInnings;
+    if (innings == null) return;
+    final legalBalls = innings.legalBallsCount();
+    final ballsPerOver = match.rules.ballsPerOver;
+    final battingTeam = innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name;
+    final crr = legalBalls == 0 ? 0.0 : (innings.totalRuns / legalBalls) * ballsPerOver;
+    final target = innings.inningsNumber == 2 ? match.target : null;
+    final totalBalls = match.rules.totalOvers * ballsPerOver;
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final runsNeeded = target == null ? 0 : (target - innings.totalRuns).clamp(0, target);
+    final rrr = target == null || ballsRemaining == 0 ? null : (runsNeeded / ballsRemaining) * ballsPerOver;
+
+    await ref.read(notificationServiceProvider).showLiveScore(
+          team1Name: battingTeam,
+          team1Score: '${innings.totalRuns}/${innings.wickets}',
+          team1Overs: '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver} ov',
+          team2Score: innings.inningsNumber == 1 ? null : '${match.firstInnings?.score ?? '-'}',
+          team2Overs: innings.inningsNumber == 1 ? null : 'Target ${match.target ?? '-'}',
+          currentEvent: '',
+          battingTeam: battingTeam,
+          crr: crr.toStringAsFixed(1),
+          rrr: rrr?.toStringAsFixed(1),
+        );
   }
 
   OverlayScoreData? _overlayScoreData(MatchModel? match) {
@@ -1087,14 +1165,14 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        IconButton(
-                          tooltip: 'Float score',
-                          onPressed: _toggleFloatingOverlay,
-                          icon: Icon(
-                            ref.watch(overlayActiveProvider)
-                                ? Icons.picture_in_picture_alt
-                                : Icons.picture_in_picture,
-                          ),
+                        TextButton(
+                          onPressed: () => _setNotifEnabled(!_notifEnabled),
+                          child: Text('🔔 ${_notifEnabled ? 'Notif ON' : 'Notif OFF'}'),
+                        ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: () => _setOverlayEnabled(!_overlayEnabled),
+                          child: Text('⬛ ${_overlayEnabled ? 'Overlay ON' : 'Overlay OFF'}'),
                         ),
                         const SizedBox(width: 4),
                         IconButton(
