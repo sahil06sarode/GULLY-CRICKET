@@ -9,7 +9,7 @@ class HotspotGuideScreen extends StatelessWidget {
 
   Future<void> _completeGuide(BuildContext context) async {
     final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
-    await settings.put('hotspot_guide_shown', true);
+    await settings.put(HiveKeys.hotspotGuideShown, true);
     if (!context.mounted) return;
     context.pop(true);
   }

@@ -631,7 +631,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
 
   Future<void> _ensureHotspotGuideAndStartHosting() async {
     final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
-    final shown = (settings.get('hotspot_guide_shown', defaultValue: false) as bool?) ?? false;
+    final shown = (settings.get(HiveKeys.hotspotGuideShown, defaultValue: false) as bool?) ?? false;
     if (!shown) {
       final accepted = await context.push<bool>('/hotspot-guide');
       if (accepted != true) return;
