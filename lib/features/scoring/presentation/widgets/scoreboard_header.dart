@@ -52,9 +52,6 @@ class _ScoreboardHeaderState extends State<ScoreboardHeader> {
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
                   ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              softWrap: false,
             )
                 .animate()
                 .scale(begin: const Offset(1, 1), end: const Offset(1.3, 1.3), duration: 100.ms)
@@ -72,9 +69,6 @@ class _ScoreboardHeaderState extends State<ScoreboardHeader> {
               child: Text(
                 'Target: $target  |  Need: $runsNeeded off $safeBallsRemaining  |  RRR: ${rrr.toStringAsFixed(1)}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                softWrap: false,
               ),
             ),
           ],
