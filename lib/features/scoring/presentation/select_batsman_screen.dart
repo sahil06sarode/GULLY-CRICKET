@@ -82,9 +82,7 @@ class SelectBatsmanScreen extends StatelessWidget {
                     final availableByStatus =
                         !player.isOut && !player.isRetiredHurt && (!player.isRetired || reEntryAllowed);
                     final isSelectable = !alreadyOnPitch && availableByStatus;
-                    final status = player.isRetiredHurt
-                        ? 'Out'
-                        : player.isOut
+                    final status = player.isRetiredHurt || player.isOut
                         ? 'Out'
                         : player.isRetired
                         ? (reEntryAllowed ? 'Retired (recall)' : 'Retired')

@@ -56,7 +56,7 @@ class RuleEngine {
   }) {
     final totalBatters = battingPlayers.length;
     final wicketsToEnd =
-        (rules.lastManBatsAlone ? totalBatters : totalBatters - 1).clamp(0, 11) as int;
+        (rules.lastManBatsAlone ? totalBatters : totalBatters - 1).clamp(0, 11).toInt();
     final unavailableBatters = battingPlayers
         .where((player) => player.isOut || player.isRetiredHurt || (player.isRetired && !rules.reEntryAllowed))
         .length;

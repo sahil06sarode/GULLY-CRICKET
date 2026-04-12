@@ -10,6 +10,7 @@ class GullyRulesAdapter extends TypeAdapter<GullyRules> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    final legacyTotalPlayers = fields[17] as int?;
     return GullyRules(
       halfCenturyRetire: fields[0] as bool,
       centuryRetire: fields[1] as bool,
@@ -28,8 +29,8 @@ class GullyRulesAdapter extends TypeAdapter<GullyRules> {
       maxOversPerBowler: fields[14] as int,
       ballsPerOver: fields[15] as int,
       totalOvers: fields[16] as int,
-      team1Players: (fields[17] as int?) ?? (fields[18] as int?) ?? 6,
-      team2Players: (fields[18] as int?) ?? (fields[17] as int?) ?? 6,
+      team1Players: fields[17] as int? ?? 6,
+      team2Players: fields[18] as int? ?? legacyTotalPlayers ?? 6,
     );
   }
 
