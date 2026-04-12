@@ -273,7 +273,6 @@ class _TeamSection extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
-                softWrap: false,
               ),
             if (savedPlayers.isNotEmpty) ...<Widget>[
               const SizedBox(height: 10),

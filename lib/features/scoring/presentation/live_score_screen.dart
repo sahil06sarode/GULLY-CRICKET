@@ -868,7 +868,6 @@ class _PlayerLine extends StatelessWidget {
             '$name   $stats',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            softWrap: false,
           ),
         ),
       ],
