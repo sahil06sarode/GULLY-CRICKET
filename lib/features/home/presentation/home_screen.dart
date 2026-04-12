@@ -20,11 +20,11 @@ class HomeScreen extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                const OfflineModeBanner(),
-                const SizedBox(height: 12),
-                Center(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    const OfflineModeBanner(),
+                    const SizedBox(height: 12),
+                    Center(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
                     child: Image.asset(
@@ -79,30 +79,55 @@ class HomeScreen extends StatelessWidget {
                   height: 56,
                   child: OutlinedButton(
                     onPressed: () => context.go('/join'),
-                    child: const Text('📡 Join Match (as Viewer)'),
+                    child: const Text('📡 Join as Viewer'),
                   ),
                 )
                     .animate()
                     .slideY(begin: 0.22, end: 0, duration: 300.ms, delay: 200.ms)
                     .fadeIn(delay: 200.ms, duration: 300.ms),
                 const SizedBox(height: 16),
-                SizedBox(
-                  height: 56,
-                  child: OutlinedButton(
-                    onPressed: () => context.go('/history'),
-                    child: const Text('📋 Match History'),
-                  ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton(
+                          onPressed: () => context.go('/history'),
+                          child: const Text('📋 Match History'),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton(
+                          onPressed: () => context.go('/teams'),
+                          child: const Text('👥 Teams'),
+                        ),
+                      ),
+                    ),
+                  ],
                 )
                     .animate()
                     .slideY(begin: 0.22, end: 0, duration: 300.ms, delay: 300.ms)
                     .fadeIn(delay: 300.ms, duration: 300.ms),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 56,
-                  child: OutlinedButton(
-                    onPressed: () => context.go('/players'),
-                    child: const Text('👥 Saved Players'),
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    TextButton(
+                      onPressed: () => context.go('/players'),
+                      child: const Text('🏆 Player Stats'),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text('•'),
+                    const SizedBox(width: 4),
+                    TextButton(
+                      onPressed: () => context.go('/settings'),
+                      child: const Text('⚙️ Settings'),
+                    ),
+                  ],
                 )
                     .animate()
                     .slideY(begin: 0.22, end: 0, duration: 300.ms, delay: 400.ms)

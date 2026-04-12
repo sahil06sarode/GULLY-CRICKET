@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../domain/saved_player_model.dart';
 import '../services/saved_players_service.dart';
@@ -74,6 +75,7 @@ class _SavedPlayersScreenState extends ConsumerState<SavedPlayersScreen> {
                         itemBuilder: (context, index) {
                           final player = players[index];
                           return ListTile(
+                            onTap: () => context.push('/player/${Uri.encodeComponent(player.name)}'),
                             title: Text(
                               player.name,
                               overflow: TextOverflow.ellipsis,

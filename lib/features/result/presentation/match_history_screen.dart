@@ -56,10 +56,7 @@ class MatchHistoryScreen extends ConsumerWidget {
                       final match = matches[index];
                       return MatchHistoryTile(
                         match: match,
-                        onTap: () => context.push(
-                          '/result',
-                          extra: <String, dynamic>{'match': match, 'readOnly': true},
-                        ),
+                        onTap: () => context.push('/report/${match.id}'),
                         onLongPress: () async {
                           final confirm = await showDialog<bool>(
                             context: context,

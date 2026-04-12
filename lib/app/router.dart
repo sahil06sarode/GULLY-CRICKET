@@ -8,14 +8,21 @@ import '../features/match_setup/presentation/match_setup_screen.dart';
 import '../features/match_setup/presentation/rules_config_screen.dart';
 import '../features/match_setup/presentation/team_setup_screen.dart';
 import '../features/multiplayer/presentation/host_lobby_screen.dart';
+import '../features/multiplayer/presentation/hotspot_guide_screen.dart';
 import '../features/multiplayer/presentation/join_screen.dart';
 import '../features/multiplayer/presentation/spectator_screen.dart';
 import '../features/onboarding/presentation/welcome_screen.dart';
+import '../features/players/presentation/player_dashboard_screen.dart';
+import '../features/result/presentation/match_report_screen.dart';
 import '../features/players/presentation/saved_players_screen.dart';
 import '../features/result/presentation/match_history_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/scoring/domain/models/match_model.dart';
 import '../features/scoring/presentation/live_score_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
+import '../features/teams/presentation/create_team_screen.dart';
+import '../features/teams/presentation/team_dashboard_screen.dart';
+import '../features/teams/presentation/teams_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   redirect: (BuildContext context, GoRouterState state) {
@@ -56,10 +63,31 @@ final GoRouter appRouter = GoRouter(
           const RulesConfigScreen(),
     ),
     GoRoute(
-      path: '/teams',
-      name: 'teams',
+      path: '/setup/teams',
+      name: 'setupTeams',
       builder: (BuildContext context, GoRouterState state) =>
           const TeamSetupScreen(),
+    ),
+    GoRoute(
+      path: '/teams',
+      name: 'teams',
+      builder: (BuildContext context, GoRouterState state) => const TeamsScreen(),
+    ),
+    GoRoute(
+      path: '/teams/create',
+      name: 'createTeam',
+      builder: (BuildContext context, GoRouterState state) {
+        final teamId = state.uri.queryParameters['teamId'];
+        return CreateTeamScreen(teamId: teamId);
+      },
+    ),
+    GoRoute(
+      path: '/teams/:teamId',
+      name: 'teamDashboard',
+      builder: (BuildContext context, GoRouterState state) {
+        final teamId = state.pathParameters['teamId'] ?? '';
+        return TeamDashboardScreen(teamId: teamId);
+      },
     ),
     GoRoute(
       path: '/host',
@@ -71,6 +99,11 @@ final GoRouter appRouter = GoRouter(
       path: '/join',
       name: 'join',
       builder: (BuildContext context, GoRouterState state) => const JoinScreen(),
+    ),
+    GoRoute(
+      path: '/hotspot-guide',
+      name: 'hotspotGuide',
+      builder: (BuildContext context, GoRouterState state) => const HotspotGuideScreen(),
     ),
     GoRoute(
       path: '/live',
@@ -104,9 +137,30 @@ final GoRouter appRouter = GoRouter(
       builder: (BuildContext context, GoRouterState state) => const MatchHistoryScreen(),
     ),
     GoRoute(
+      path: '/report/:matchId',
+      name: 'matchReport',
+      builder: (BuildContext context, GoRouterState state) {
+        final matchId = state.pathParameters['matchId'] ?? '';
+        return MatchReportScreen(matchId: matchId);
+      },
+    ),
+    GoRoute(
       path: '/players',
       name: 'players',
       builder: (BuildContext context, GoRouterState state) => const SavedPlayersScreen(),
+    ),
+    GoRoute(
+      path: '/settings',
+      name: 'settings',
+      builder: (BuildContext context, GoRouterState state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/player/:playerName',
+      name: 'playerDashboard',
+      builder: (BuildContext context, GoRouterState state) {
+        final playerName = Uri.decodeComponent(state.pathParameters['playerName'] ?? '');
+        return PlayerDashboardScreen(playerName: playerName);
+      },
     ),
   ],
 );

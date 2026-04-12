@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../teams/domain/team_model.dart';
+import '../../teams/services/teams_service.dart';
 import 'match_setup_notifier.dart';
 
 class MatchSetupScreen extends ConsumerStatefulWidget {
@@ -20,6 +22,11 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
   late int _team1PlayerCount;
   late int _team2PlayerCount;
   late bool _enableToss;
+  String? _team1SavedId;
+  String? _team2SavedId;
+  List<String> _team1PresetPlayers = const <String>[];
+  List<String> _team2PresetPlayers = const <String>[];
+  bool _editPlayersAfterSaved = false;
 
   @override
   void initState() {
@@ -51,22 +58,68 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
       return;
     }
 
-    ref
-        .read(matchSetupProvider.notifier)
-        .updateBase(
-          team1Name: team1,
-          team2Name: team2,
-          totalOvers: _totalOvers,
-          ballsPerOver: _ballsPerOver,
-          team1PlayerCount: _team1PlayerCount,
-          team2PlayerCount: _team2PlayerCount,
-          enableToss: _enableToss,
-        );
-    context.push('/teams');
+    final team1Players = _team1PresetPlayers.isEmpty
+        ? List<String>.filled(_team1PlayerCount, '')
+        : _team1PresetPlayers;
+    final team2Players = _team2PresetPlayers.isEmpty
+        ? List<String>.filled(_team2PlayerCount, '')
+        : _team2PresetPlayers;
+
+    final setup = ref.read(matchSetupProvider.notifier);
+    setup.updateTeamPlayers(team1Players: team1Players, team2Players: team2Players);
+    setup.updateBase(
+      team1Name: team1,
+      team2Name: team2,
+      totalOvers: _totalOvers,
+      ballsPerOver: _ballsPerOver,
+      team1PlayerCount: _team1PlayerCount,
+      team2PlayerCount: _team2PlayerCount,
+      enableToss: _enableToss,
+    );
+
+    final bothSaved = _team1SavedId != null && _team2SavedId != null;
+    if (bothSaved && !_editPlayersAfterSaved) {
+      context.push('/rules');
+      return;
+    }
+    context.push('/setup/teams');
+  }
+
+  void _selectSavedTeam({required TeamModel team, required bool isTeam1}) {
+    final players = team.playerNames.where((name) => name.trim().isNotEmpty).toList();
+    final count = players.isEmpty ? 1 : players.length.clamp(1, 11).toInt();
+    setState(() {
+      if (isTeam1) {
+        _team1SavedId = team.id;
+        _team1Controller.text = team.name;
+        _team1PlayerCount = count;
+        _team1PresetPlayers = players;
+      } else {
+        _team2SavedId = team.id;
+        _team2Controller.text = team.name;
+        _team2PlayerCount = count;
+        _team2PresetPlayers = players;
+      }
+    });
+  }
+
+  void _clearSavedTeam(bool isTeam1) {
+    setState(() {
+      if (isTeam1) {
+        _team1SavedId = null;
+        _team1PresetPlayers = const <String>[];
+      } else {
+        _team2SavedId = null;
+        _team2PresetPlayers = const <String>[];
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final teams = ref.watch(teamsProvider);
+    final bothSavedSelected = _team1SavedId != null && _team2SavedId != null;
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('New Match')),
@@ -78,6 +131,36 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
               children: <Widget>[
                 Text('Match Settings', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Load saved team?', style: Theme.of(context).textTheme.titleMedium),
+                ),
+                const SizedBox(height: 8),
+                _SavedTeamChips(
+                  title: 'Team A',
+                  teams: teams,
+                  selectedTeamId: _team1SavedId,
+                  onSelect: (team) => _selectSavedTeam(team: team, isTeam1: true),
+                  onClear: () => _clearSavedTeam(true),
+                ),
+                const SizedBox(height: 6),
+                _SavedTeamChips(
+                  title: 'Team B',
+                  teams: teams,
+                  selectedTeamId: _team2SavedId,
+                  onSelect: (team) => _selectSavedTeam(team: team, isTeam1: false),
+                  onClear: () => _clearSavedTeam(false),
+                ),
+                const SizedBox(height: 8),
+                if (bothSavedSelected)
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    value: _editPlayersAfterSaved,
+                    title: const Text('Edit Players?'),
+                    onChanged: (value) => setState(() => _editPlayersAfterSaved = value ?? false),
+                  ),
+                const SizedBox(height: 8),
                 TextField(
                   controller: _team1Controller,
                   decoration: const InputDecoration(labelText: 'Team 1 Name'),
@@ -199,7 +282,11 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
                   height: 56,
                   child: ElevatedButton(
                     onPressed: _handleNext,
-                    child: const Text('Next: Add Players →'),
+                    child: Text(
+                      bothSavedSelected && !_editPlayersAfterSaved
+                          ? 'Next: Rules →'
+                          : 'Next: Add Players →',
+                    ),
                   ),
                 ),
               ],
@@ -207,6 +294,61 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SavedTeamChips extends StatelessWidget {
+  const _SavedTeamChips({
+    required this.title,
+    required this.teams,
+    required this.selectedTeamId,
+    required this.onSelect,
+    required this.onClear,
+  });
+
+  final String title;
+  final List<TeamModel> teams;
+  final String? selectedTeamId;
+  final ValueChanged<TeamModel> onSelect;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(title, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 4),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: <Widget>[
+              ...teams.map(
+                (team) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    selected: selectedTeamId == team.id,
+                    label: Text(team.name),
+                    onSelected: (_) => onSelect(team),
+                  ),
+                ),
+              ),
+              ActionChip(
+                label: const Text('+ New Team'),
+                onPressed: () => context.push('/teams/create'),
+              ),
+              if (selectedTeamId != null) ...<Widget>[
+                const SizedBox(width: 8),
+                ActionChip(
+                  label: const Text('Clear'),
+                  onPressed: onClear,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

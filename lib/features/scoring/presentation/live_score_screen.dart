@@ -13,17 +13,21 @@ import '../../../core/constants/match_status.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../audio/sound_service.dart';
 import '../../multiplayer/services/host_service.dart';
+import '../../notifications/notification_service.dart';
+import '../../overlay/overlay_service.dart';
 import '../domain/engines/match_engine.dart';
 import '../domain/engines/rule_engine.dart';
 import '../domain/models/ball_model.dart';
 import '../domain/models/gully_rules_model.dart';
 import '../domain/models/innings_model.dart';
 import '../domain/models/match_model.dart';
+import '../domain/models/over_model.dart';
 import '../domain/models/player_model.dart';
 import 'active_match_provider.dart';
 import 'select_batsman_screen.dart';
 import 'select_bowler_screen.dart';
 import 'widgets/ball_timeline.dart';
+import 'widgets/official_scoreboard.dart';
 import 'widgets/quick_action_bar.dart';
 import 'widgets/score_pad.dart';
 import 'widgets/scoreboard_header.dart';
@@ -47,10 +51,15 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
   bool _bootstrapped = false;
   bool _sheetOpen = false;
   bool _showWicketFlash = false;
+  String _scoreboardStyle = 'simple';
+  bool _notifEnabled = true;
+  bool _overlayEnabled = false;
 
   @override
   void initState() {
     super.initState();
+    _loadScoreboardStyle();
+    _loadSyncPreferences();
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapIfNeeded());
   }
 
@@ -85,6 +94,162 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
       active = initialized;
     }
     await _ensureReadyForBall(active);
+    await _showLiveNotificationSnapshot(active);
+  }
+
+  void _loadScoreboardStyle() {
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    final stored = (settings.get('scoreboard_style', defaultValue: 'simple') as String?) ?? 'simple';
+    if (stored == 'simple' || stored == 'official') {
+      _scoreboardStyle = stored;
+    }
+  }
+
+  void _loadSyncPreferences() {
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    _notifEnabled = (settings.get(HiveKeys.notifEnabled, defaultValue: true) as bool?) ?? true;
+    _overlayEnabled = (settings.get(HiveKeys.overlayEnabled, defaultValue: false) as bool?) ?? false;
+  }
+
+  Future<void> _setScoreboardStyle(String style) async {
+    if (style != 'simple' && style != 'official') return;
+    if (_scoreboardStyle == style) return;
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    await settings.put('scoreboard_style', style);
+    if (mounted) {
+      setState(() => _scoreboardStyle = style);
+    }
+  }
+
+  Future<void> _toggleFloatingOverlay() async {
+    final active = ref.read(overlayActiveProvider);
+    if (active) {
+      await OverlayService.closeOverlay();
+      ref.read(overlayActiveProvider.notifier).state = false;
+      await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, false);
+      if (mounted) {
+        setState(() => _overlayEnabled = false);
+      }
+      if (mounted) _showTopSnackBar('Floating score disabled');
+      return;
+    }
+
+    final granted = await OverlayService.hasPermission();
+    if (!granted) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Overlay Permission Needed'),
+          content: const Text(
+            'To float score above other apps, allow "Display over other apps" for Gully Cricket.',
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                await OverlayService.requestPermission();
+                if (mounted) Navigator.of(context).pop();
+              },
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final data = _overlayScoreData(ref.read(activeMatchProvider));
+    if (data == null) return;
+    await OverlayService.showOverlay(data);
+    ref.read(overlayActiveProvider.notifier).state = true;
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, true);
+    if (mounted) {
+      setState(() => _overlayEnabled = true);
+    }
+    // This pops the app activity on Android so the floating overlay remains visible over other apps.
+    await SystemNavigator.pop();
+  }
+
+  Future<void> _setNotifEnabled(bool enabled) async {
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.notifEnabled, enabled);
+    if (mounted) {
+      setState(() => _notifEnabled = enabled);
+    }
+    final notif = ref.read(notificationServiceProvider);
+    if (!enabled) {
+      await notif.cancelLiveScore();
+      return;
+    }
+    final match = ref.read(activeMatchProvider);
+    if (match != null) {
+      await _showLiveNotificationSnapshot(match);
+    }
+  }
+
+  Future<void> _setOverlayEnabled(bool enabled) async {
+    if (enabled) {
+      await _toggleFloatingOverlay();
+      return;
+    }
+    await Hive.box<dynamic>(HiveKeys.settingsBox).put(HiveKeys.overlayEnabled, false);
+    if (mounted) {
+      setState(() => _overlayEnabled = false);
+    }
+    final active = ref.read(overlayActiveProvider);
+    if (active) {
+      await OverlayService.closeOverlay();
+      ref.read(overlayActiveProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> _showLiveNotificationSnapshot(MatchModel match) async {
+    if (!_notifEnabled) return;
+    final innings = match.currentInnings;
+    if (innings == null) return;
+    final legalBalls = innings.legalBallsCount();
+    final ballsPerOver = match.rules.ballsPerOver;
+    final battingTeam = innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name;
+    final crr = legalBalls == 0 ? 0.0 : (innings.totalRuns / legalBalls) * ballsPerOver;
+    final target = innings.inningsNumber == 2 ? match.target : null;
+    final totalBalls = match.rules.totalOvers * ballsPerOver;
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final runsNeeded = target == null ? 0 : (target - innings.totalRuns).clamp(0, target);
+    final rrr = target == null || ballsRemaining == 0 ? null : (runsNeeded / ballsRemaining) * ballsPerOver;
+
+    await ref.read(notificationServiceProvider).showLiveScore(
+          team1Name: battingTeam,
+          team1Score: '${innings.totalRuns}/${innings.wickets}',
+          team1Overs: '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver} ov',
+          team2Score: innings.inningsNumber == 1 ? null : '${match.firstInnings?.score ?? '-'}',
+          team2Overs: innings.inningsNumber == 1 ? null : 'Target ${match.target ?? '-'}',
+          currentEvent: '',
+          battingTeam: battingTeam,
+          crr: crr.toStringAsFixed(1),
+          rrr: rrr?.toStringAsFixed(1),
+        );
+  }
+
+  OverlayScoreData? _overlayScoreData(MatchModel? match) {
+    if (match == null) return null;
+    final innings = match.currentInnings;
+    if (innings == null) return null;
+    final batting = innings.battingTeamId == 'team1' ? match.team1Players : match.team2Players;
+    final striker = _findPlayer(batting, innings.currentBatsmanId);
+    final nonStriker = _findPlayer(batting, innings.currentNonStrikerId);
+    return OverlayScoreData(
+      battingTeam: innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name,
+      score: '${innings.totalRuns}/${innings.wickets}',
+      overs: _oversText(innings, match),
+      crr: _currentRunRate(innings, match).toStringAsFixed(1),
+      rrr: innings.inningsNumber == 2 ? _requiredRunRate(innings, match).toStringAsFixed(1) : null,
+      batsmenInfo:
+          '${striker?.name ?? 'Striker'} ${striker?.runsScored ?? 0}* · ${nonStriker?.name ?? 'Non-striker'} ${nonStriker?.runsScored ?? 0}',
+      currentEvent: '',
+    );
   }
 
   Future<void> _handleRun(int runs) async {
@@ -312,7 +477,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
   }) async {
     final updated = await ref.read(activeMatchProvider.notifier).recordBall(ball);
     if (updated == null) return null;
-    await _broadcastIfHosting();
+    await _broadcastIfHosting(ball: ball);
     final innings = updated.currentInnings;
     if (innings == null) return updated;
 
@@ -530,11 +695,34 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     );
   }
 
-  Future<void> _broadcastIfHosting() async {
+  Future<void> _broadcastIfHosting({Ball? ball}) async {
     final host = ref.read(hostServiceProvider);
     final match = ref.read(activeMatchProvider);
     if (host.isHosting && match != null) {
-      host.broadcastMatchState(match);
+      if (ball != null) {
+        host.broadcastBallRecorded(ball, match);
+      } else {
+        host.broadcastMatchState(match);
+      }
+    }
+  }
+
+  Future<void> _ensureHotspotGuideAndStartHosting() async {
+    final settings = Hive.box<dynamic>(HiveKeys.settingsBox);
+    final shown = (settings.get(HiveKeys.hotspotGuideShown, defaultValue: false) as bool?) ?? false;
+    if (!shown) {
+      final accepted = await context.push<bool>('/hotspot-guide');
+      if (accepted != true) return;
+    }
+
+    final host = ref.read(hostServiceProvider);
+    final match = ref.read(activeMatchProvider);
+    if (match == null) return;
+    await host.startServer(match);
+    host.broadcastMatchState(match);
+    if (mounted) {
+      Navigator.of(context).pop();
+      _showTopSnackBar('Hosting started at ${host.hostIp}');
     }
   }
 
@@ -589,6 +777,257 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     );
   }
 
+  String _oversText(Innings innings, MatchModel match) {
+    final legalBalls = innings.legalBallsCount();
+    return '${legalBalls ~/ match.rules.ballsPerOver}.${legalBalls % match.rules.ballsPerOver}';
+  }
+
+  double _currentRunRate(Innings innings, MatchModel match) {
+    final legalBalls = innings.legalBallsCount();
+    if (legalBalls == 0) return 0;
+    return (innings.totalRuns / legalBalls) * match.rules.ballsPerOver;
+  }
+
+  double _requiredRunRate(Innings innings, MatchModel match) {
+    final target = match.target;
+    if (target == null || innings.inningsNumber != 2) return 0;
+    final totalBalls = match.rules.totalOvers * match.rules.ballsPerOver;
+    final legalBalls = innings.legalBallsCount();
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final runsNeeded = (target - innings.totalRuns).clamp(0, target);
+    if (ballsRemaining == 0) return 0;
+    return (runsNeeded / ballsRemaining) * match.rules.ballsPerOver;
+  }
+
+  String _targetNeedText(Innings innings, MatchModel match) {
+    final target = match.target;
+    if (target == null || innings.inningsNumber != 2) {
+      return 'Target: -   Need: -';
+    }
+    final totalBalls = match.rules.totalOvers * match.rules.ballsPerOver;
+    final legalBalls = innings.legalBallsCount();
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final runsNeeded = (target - innings.totalRuns).clamp(0, target);
+    return 'Target: $target   Need: $runsNeeded off $ballsRemaining balls';
+  }
+
+  String _projectionText(Innings innings, MatchModel match) {
+    final totalBalls = match.rules.totalOvers * match.rules.ballsPerOver;
+    final legalBalls = innings.legalBallsCount();
+    if (innings.inningsNumber == 1) {
+      if (legalBalls == 0) return 'Proj: -';
+      final projected = ((innings.totalRuns / legalBalls) * totalBalls).round();
+      return 'Proj: $projected';
+    }
+    final target = match.target;
+    if (target == null) return 'Proj: -';
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final runsNeeded = (target - innings.totalRuns).clamp(0, target);
+    if (runsNeeded == 0) return 'Win in $ballsRemaining balls';
+    return 'Need $runsNeeded from $ballsRemaining at RRR ${_requiredRunRate(innings, match).toStringAsFixed(1)}';
+  }
+
+  List<Over> _recentCompletedOvers(
+    Innings innings, {
+    required int ballsPerOver,
+    int limit = 3,
+  }) {
+    final completed = innings.overs
+        .where((over) => over.balls.isNotEmpty && over.isComplete(ballsPerOver))
+        .toList();
+    if (completed.isEmpty) return const <Over>[];
+    final skip = completed.length > limit ? completed.length - limit : 0;
+    return completed.skip(skip).toList().reversed.toList();
+  }
+
+  String _deliveryLabel(Ball ball) {
+    if (ball.isWide) return ball.runsScored > 0 ? 'Wd+${ball.runsScored}' : 'Wd';
+    if (ball.isNoBall) return ball.runsScored > 0 ? 'Nb+${ball.runsScored}' : 'Nb';
+    if (ball.isWicket) return 'W';
+    if (ball.isBye) return ball.runsScored > 0 ? 'B+${ball.runsScored}' : 'B';
+    if (ball.isLegBye) return ball.runsScored > 0 ? 'Lb+${ball.runsScored}' : 'Lb';
+    if (ball.runsScored == 0) return '·';
+    return '${ball.runsScored}';
+  }
+
+  String _wicketTypeLabel(String? wicketType) {
+    switch (wicketType) {
+      case 'run_out':
+        return 'run out';
+      case 'tip_catch':
+        return 'tip catch';
+      case 'stumped':
+        return 'stumped';
+      case 'lbw':
+        return 'lbw';
+      case 'bowled':
+        return 'bowled';
+      case 'caught':
+        return 'caught';
+      default:
+        return 'out';
+    }
+  }
+
+  String _ballDetailText(Ball ball, String batterName, String? dismissedName) {
+    if (ball.isWicket) {
+      final outName = dismissedName == null || dismissedName.isEmpty ? batterName : dismissedName;
+      return 'Wicket — $outName ${_wicketTypeLabel(ball.wicketType)}';
+    }
+    if (ball.isWide) {
+      final wideRuns = 1 + ball.runsScored;
+      return wideRuns == 1 ? 'Wide — extra' : 'Wide + ${ball.runsScored} run(s) — extra';
+    }
+    if (ball.isNoBall) {
+      final noBallRuns = 1 + ball.runsScored;
+      return noBallRuns == 1 ? 'No ball — extra' : 'No ball + ${ball.runsScored} run(s)';
+    }
+    if (ball.isBye) {
+      return '${ball.runsScored} bye run(s) — extra';
+    }
+    if (ball.isLegBye) {
+      return '${ball.runsScored} leg-bye run(s) — extra';
+    }
+    if (ball.runsScored == 0) return '0 dot — $batterName';
+    if (ball.runsScored == 4) return '4 — boundary — $batterName';
+    if (ball.runsScored == 6) return '6 — six — $batterName';
+    return '${ball.runsScored} run(s) — $batterName';
+  }
+
+  Future<void> _showOverDetails({
+    required MatchModel match,
+    required Innings innings,
+    required Over over,
+    required List<Player> batting,
+    required List<Player> bowling,
+  }) async {
+    final bowler = _findPlayer(bowling, over.bowlerId);
+    final bowlerName = bowler?.name ?? 'Unknown';
+    final overIndex = innings.overs.indexWhere((o) => o.id == over.id);
+    final oversByBowler = innings.overs
+        .where((o) => o.bowlerId == over.bowlerId && innings.overs.indexOf(o) <= overIndex && o.balls.isNotEmpty)
+        .toList();
+    final legalBalls = oversByBowler.fold<int>(0, (sum, o) => sum + o.legalBallCount);
+    final maidens =
+        oversByBowler.where((o) => o.isComplete(match.rules.ballsPerOver) && o.runsInOver == 0).length;
+    final runs = oversByBowler.fold<int>(0, (sum, o) => sum + o.runsInOver);
+    final wickets = oversByBowler.fold<int>(0, (sum, o) => sum + o.wicketsInOver);
+    final figures = '${legalBalls ~/ match.rules.ballsPerOver}.${legalBalls % match.rules.ballsPerOver}-$maidens-$runs-$wickets';
+
+    var legalBallNo = 0;
+    var previousWasIllegal = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            ListTile(
+              title: Text('Over ${over.overNumber + 1} — Bowled by $bowlerName'),
+              subtitle: Text('Summary: ${over.runsInOver} runs · ${over.wicketsInOver} wicket(s)'),
+            ),
+            ...over.balls.map((ball) {
+              final batter = _findPlayer(batting, ball.batsmanId);
+              final dismissed = _findPlayer(batting, ball.dismissedPlayerId);
+              final ballPrefix = ball.isLegalBall
+                  ? 'Ball ${++legalBallNo}${previousWasIllegal ? 'R' : ''}'
+                  : 'Ball ${legalBallNo + 1}';
+              previousWasIllegal = !ball.isLegalBall;
+              return ListTile(
+                dense: true,
+                title: Text(
+                  '$ballPrefix: ${_ballDetailText(ball, batter?.name ?? 'Batter', dismissed?.name)}',
+                ),
+                subtitle: Text('Total: ${ball.totalRunsAfterBall}'),
+              );
+            }),
+            ListTile(
+              title: Text('Over summary: ${over.runsInOver} runs · ${over.wicketsInOver} wicket(s)'),
+              subtitle: Text("$bowlerName's figures: $figures"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLastOversSection({
+    required MatchModel match,
+    required Innings innings,
+    required List<Player> batting,
+    required List<Player> bowling,
+    int limit = 3,
+  }) {
+    final overs = _recentCompletedOvers(
+      innings,
+      ballsPerOver: match.rules.ballsPerOver,
+      limit: limit,
+    );
+    if (overs.isEmpty) {
+      return const Text('LAST OVERS: No completed overs yet');
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('LAST $limit OVERS:', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        ...overs.map((over) {
+          final bowler = _findPlayer(bowling, over.bowlerId);
+          return InkWell(
+            onTap: () => _showOverDetails(
+              match: match,
+              innings: innings,
+              over: over,
+              batting: batting,
+              bowling: bowling,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'Ov${over.overNumber + 1}: ${bowler?.name ?? 'Bowler'} ${over.runsInOver} runs',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      alignment: WrapAlignment.end,
+                      children: over.balls
+                          .map(
+                            (ball) => Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(6),
+                                color: Colors.white10,
+                              ),
+                              child: Text(
+                                _deliveryLabel(ball),
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   Future<void> _showWifiInfo() async {
     final host = ref.read(hostServiceProvider);
     final match = ref.read(activeMatchProvider);
@@ -625,18 +1064,11 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
               children: <Widget>[
                 const Text('Not hosting yet'),
                 const SizedBox(height: 8),
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await host.startServer(match);
-                    host.broadcastMatchState(match);
-                    if (mounted) {
-                      Navigator.of(context).pop();
-                      _showTopSnackBar('Hosting started at ${host.hostIp}');
-                    }
-                  },
-                  icon: const Icon(Icons.wifi_tethering),
-                  label: const Text('Start Hosting'),
-                ),
+                  ElevatedButton.icon(
+                    onPressed: _ensureHotspotGuideAndStartHosting,
+                    icon: const Icon(Icons.wifi_tethering),
+                    label: const Text('Start Hosting'),
+                  ),
               ],
             ),
           ),
@@ -670,6 +1102,12 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     final allBalls = _currentOverBalls(innings);
     final partnershipInfo = _matchEngine.currentPartnership(innings);
     final partnershipText = 'Partner: ${partnershipInfo.runs}(${partnershipInfo.balls})';
+    final oversText = _oversText(innings, match);
+    final crr = _currentRunRate(innings, match);
+    final rrr = _requiredRunRate(innings, match);
+    final targetNeedText = _targetNeedText(innings, match);
+    final projectedText = _projectionText(innings, match);
+    final thisOverLabels = allBalls.map(_deliveryLabel).toList();
 
     return Scaffold(
       body: SafeArea(
@@ -691,13 +1129,52 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                           icon: const Icon(Icons.menu),
                         ),
                         const Expanded(
-                          child: Center(
-                            child: Text(
-                              'LIVE',
-                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-                            ),
+                          child: Center(child: Text('LIVE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
+                        ),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ToggleButtons(
+                            isSelected: <bool>[
+                              _scoreboardStyle == 'simple',
+                              _scoreboardStyle == 'official',
+                            ],
+                            borderRadius: BorderRadius.circular(8),
+                            constraints: const BoxConstraints(minHeight: 30, minWidth: 72),
+                            onPressed: (index) {
+                              _setScoreboardStyle(index == 0 ? 'simple' : 'official');
+                            },
+                            children: const <Widget>[
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 6),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[Text('📊'), SizedBox(width: 4), Text('Simple')],
+                                ),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 6),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: <Widget>[Text('🏆'), SizedBox(width: 4), Text('Official')],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: () => _setNotifEnabled(!_notifEnabled),
+                          child: Text('🔔 ${_notifEnabled ? 'Notif ON' : 'Notif OFF'}'),
+                        ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: () => _setOverlayEnabled(!_overlayEnabled),
+                          child: Text('⬛ ${_overlayEnabled ? 'Overlay ON' : 'Overlay OFF'}'),
+                        ),
+                        const SizedBox(width: 4),
                         IconButton(
                           onPressed: () => context.push('/result'),
                           icon: const Icon(Icons.bar_chart),
@@ -706,70 +1183,141 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                     ),
                   ),
                 ),
-                SizedBox(
-                  height: 120,
-                  child: ScoreboardHeader(match: match, innings: innings),
-                ),
-                SizedBox(
-                  height: 96,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                    child: Column(
-                      children: <Widget>[
-                        _PlayerLine(
-                          icon: '🟢',
-                          name: '${striker?.name ?? 'Select striker'}*',
-                          stats:
-                              '${striker?.runsScored ?? 0}(${striker?.ballsFaced ?? 0})  SR: ${(striker?.strikeRate ?? 0).toStringAsFixed(0)}',
-                        ),
-                        const SizedBox(height: 6),
-                        _PlayerLine(
-                          icon: '🔵',
-                          name: nonStriker?.name ?? 'Select non-striker',
-                          stats:
-                              '${nonStriker?.runsScored ?? 0}(${nonStriker?.ballsFaced ?? 0})  SR: ${(nonStriker?.strikeRate ?? 0).toStringAsFixed(0)}',
-                        ),
-                        const SizedBox(height: 6),
-                        _PlayerLine(
-                          icon: '🎯',
-                          name: bowler?.name ?? 'Select bowler',
-                          stats:
-                              '${bowlerFigures.oversText}-${bowlerFigures.maidens}-${bowlerFigures.runs}-${bowlerFigures.wickets}  Eco: ${bowlerFigures.economy.toStringAsFixed(1)}',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  height: 52,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: BallTimeline(balls: allBalls),
-                  ),
-                ),
                 Expanded(
-                  child: ScorePad(
-                    onRun: _handleRun,
-                    onWide: () async {
-                      await HapticFeedback.selectionClick();
-                      await _recordStandardDelivery(isWide: true);
-                    },
-                    onNoBall: () async {
-                      await HapticFeedback.selectionClick();
-                      await _recordStandardDelivery(isNoBall: true);
-                    },
-                    onBye: () async {
-                      await HapticFeedback.selectionClick();
-                      await _recordStandardDelivery(runs: 1, isBye: true);
-                    },
-                    onLegBye: () async {
-                      await HapticFeedback.selectionClick();
-                      await _recordStandardDelivery(runs: 1, isLegBye: true);
-                    },
-                    onOut: _handleOut,
-                    onUndo: _handleUndo,
-                    undoArmed: _undoArmed,
-                  ),
+                  child: _scoreboardStyle == 'official'
+                      ? OfficialScoreboard(
+                          battingTeamName: innings.battingTeamId == 'team1' ? match.team1Name : match.team2Name,
+                          scoreText: innings.score,
+                          oversText: oversText,
+                          targetNeedText: targetNeedText,
+                          strikerName: striker?.name ?? 'Select striker',
+                          strikerRuns: striker?.runsScored ?? 0,
+                          strikerBalls: striker?.ballsFaced ?? 0,
+                          strikerStrikeRate: striker?.strikeRate ?? 0,
+                          nonStrikerName: nonStriker?.name ?? 'Select non-striker',
+                          nonStrikerRuns: nonStriker?.runsScored ?? 0,
+                          nonStrikerBalls: nonStriker?.ballsFaced ?? 0,
+                          nonStrikerStrikeRate: nonStriker?.strikeRate ?? 0,
+                          bowlerName: bowler?.name ?? 'Select bowler',
+                          bowlerOvers: bowlerFigures.oversText,
+                          bowlerRuns: bowlerFigures.runs,
+                          bowlerWickets: bowlerFigures.wickets,
+                          bowlerEconomy: bowlerFigures.economy,
+                          thisOverLabels: thisOverLabels,
+                          partnershipText: 'Partnership: ${partnershipInfo.runs}(${partnershipInfo.balls})',
+                          crrText: crr.toStringAsFixed(1),
+                          rrrText: rrr.toStringAsFixed(1),
+                          projectionText: projectedText,
+                          lastOversSection: _buildLastOversSection(
+                            match: match,
+                            innings: innings,
+                            batting: batting,
+                            bowling: bowling,
+                            limit: 3,
+                          ),
+                          scorePad: ScorePad(
+                            onRun: _handleRun,
+                            onWide: () async {
+                              await HapticFeedback.selectionClick();
+                              await _recordStandardDelivery(isWide: true);
+                            },
+                            onNoBall: () async {
+                              await HapticFeedback.selectionClick();
+                              await _recordStandardDelivery(isNoBall: true);
+                            },
+                            onBye: () async {
+                              await HapticFeedback.selectionClick();
+                              await _recordStandardDelivery(runs: 1, isBye: true);
+                            },
+                            onLegBye: () async {
+                              await HapticFeedback.selectionClick();
+                              await _recordStandardDelivery(runs: 1, isLegBye: true);
+                            },
+                            onOut: _handleOut,
+                            onUndo: _handleUndo,
+                            undoArmed: _undoArmed,
+                          ),
+                        )
+                      : Column(
+                          children: <Widget>[
+                            SizedBox(
+                              height: 120,
+                              child: ScoreboardHeader(match: match, innings: innings),
+                            ),
+                            SizedBox(
+                              height: 96,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                                child: Column(
+                                  children: <Widget>[
+                                    _PlayerLine(
+                                      icon: '🟢',
+                                      name: '${striker?.name ?? 'Select striker'}*',
+                                      stats:
+                                          '${striker?.runsScored ?? 0}(${striker?.ballsFaced ?? 0})  SR: ${(striker?.strikeRate ?? 0).toStringAsFixed(0)}',
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _PlayerLine(
+                                      icon: '🔵',
+                                      name: nonStriker?.name ?? 'Select non-striker',
+                                      stats:
+                                          '${nonStriker?.runsScored ?? 0}(${nonStriker?.ballsFaced ?? 0})  SR: ${(nonStriker?.strikeRate ?? 0).toStringAsFixed(0)}',
+                                    ),
+                                    const SizedBox(height: 6),
+                                    _PlayerLine(
+                                      icon: '🎯',
+                                      name: bowler?.name ?? 'Select bowler',
+                                      stats:
+                                          '${bowlerFigures.oversText}-${bowlerFigures.maidens}-${bowlerFigures.runs}-${bowlerFigures.wickets}  Eco: ${bowlerFigures.economy.toStringAsFixed(1)}',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              height: 52,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: BallTimeline(balls: allBalls),
+                              ),
+                            ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                              child: _buildLastOversSection(
+                                match: match,
+                                innings: innings,
+                                batting: batting,
+                                bowling: bowling,
+                                limit: 2,
+                              ),
+                            ),
+                            Expanded(
+                              child: ScorePad(
+                                onRun: _handleRun,
+                                onWide: () async {
+                                  await HapticFeedback.selectionClick();
+                                  await _recordStandardDelivery(isWide: true);
+                                },
+                                onNoBall: () async {
+                                  await HapticFeedback.selectionClick();
+                                  await _recordStandardDelivery(isNoBall: true);
+                                },
+                                onBye: () async {
+                                  await HapticFeedback.selectionClick();
+                                  await _recordStandardDelivery(runs: 1, isBye: true);
+                                },
+                                onLegBye: () async {
+                                  await HapticFeedback.selectionClick();
+                                  await _recordStandardDelivery(runs: 1, isLegBye: true);
+                                },
+                                onOut: _handleOut,
+                                onUndo: _handleUndo,
+                                undoArmed: _undoArmed,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
                 SizedBox(
                   height: 48,
