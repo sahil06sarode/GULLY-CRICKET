@@ -25,7 +25,7 @@ class StatsCalculator {
     var fours = 0;
     var sixes = 0;
     var ducks = 0;
-    const timesRetired = 0;
+    var timesRetired = 0;
 
     var ballsBowled = 0;
     var runsConceded = 0;
@@ -37,9 +37,9 @@ class StatsCalculator {
     var bestRuns = 0;
     var fiveWicketHauls = 0;
 
-    const catches = 0;
-    const runOuts = 0;
-    const stumpings = 0;
+    var catches = 0;
+    var runOuts = 0;
+    var stumpings = 0;
 
     var wins = 0;
     var losses = 0;
@@ -75,6 +75,22 @@ class StatsCalculator {
         wins += 1;
       } else {
         losses += 1;
+      }
+
+      timesRetired += playersById.values
+          .where((player) => playerIds.contains(player.id) && (player.isRetired || player.isRetiredHurt))
+          .length;
+      for (final dismissedPlayer in playersById.values.where((player) => player.isOut)) {
+        if (dismissedPlayer.dismissedBy == null || !playerIds.contains(dismissedPlayer.dismissedBy)) {
+          continue;
+        }
+        if (_isCatchType(dismissedPlayer.wicketType)) {
+          catches += 1;
+        } else if (dismissedPlayer.wicketType == 'stumped') {
+          stumpings += 1;
+        } else if (dismissedPlayer.wicketType == 'run_out') {
+          runOuts += 1;
+        }
       }
 
       final inningsList = <Innings?>[match.firstInnings, match.secondInnings];
@@ -265,7 +281,7 @@ class StatsCalculator {
       var cumulativeRuns = 0;
       var cumulativeLegalBalls = 0;
 
-      for (final over in innings.overs.where((item) => item.balls.isNotEmpty)) {
+      for (final over in innings.overs.where((over) => over.balls.isNotEmpty)) {
         cumulativeRuns += over.runsInOver;
         cumulativeLegalBalls += over.legalBallCount;
 
@@ -508,6 +524,13 @@ class StatsCalculator {
     return !ball.isWide && !ball.isBye && !ball.isLegBye && ball.runsScored == runs;
   }
 
+  bool _isCatchType(String? wicketType) {
+    return wicketType == 'caught' ||
+        wicketType == 'tip_catch' ||
+        wicketType == 'wall_catch' ||
+        wicketType == 'one_bounce';
+  }
+
   int _battingRuns(Ball ball) {
     if (ball.isWide || ball.isBye || ball.isLegBye) {
       return 0;
@@ -516,6 +539,7 @@ class StatsCalculator {
   }
 
   int _deliveryTotalRuns(Ball ball) {
+    // Illegal deliveries contribute one penalty run plus any runs scored off the bat/byes.
     return (ball.isWide || ball.isNoBall) ? 1 + ball.runsScored : ball.runsScored;
   }
 
@@ -525,14 +549,12 @@ class StatsCalculator {
     int currentWickets,
     int currentRuns,
   ) {
-    if (candidateWickets > currentWickets) {
-      return true;
+    if (candidateWickets != currentWickets) {
+      return candidateWickets > currentWickets;
     }
-    if (candidateWickets < currentWickets) {
+    // Keep the initial 0/0 baseline ahead of 0/N figures.
+    if (candidateWickets == 0 && currentRuns == 0) {
       return false;
-    }
-    if (candidateWickets == 0 && currentWickets == 0 && currentRuns == 0) {
-      return candidateRuns > 0;
     }
     return candidateRuns < currentRuns;
   }
@@ -554,9 +576,11 @@ class StatsCalculator {
   }
 
   String? _bestBowlerId(Map<String, int> wickets, Map<String, int> runsConceded) {
+    // Large ceiling value so the first real bowling figure always wins the tie-break compare.
+    const maxRunSentinel = 1 << 30;
     String? bestId;
     var bestWickets = -1;
-    var bestRuns = 1 << 30;
+    var bestRuns = maxRunSentinel;
 
     for (final id in {...wickets.keys, ...runsConceded.keys}) {
       final w = wickets[id] ?? 0;

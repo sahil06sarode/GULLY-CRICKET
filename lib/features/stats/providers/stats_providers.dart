@@ -30,6 +30,17 @@ class H2HQuery {
 
   final String team1;
   final String team2;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is H2HQuery && other.team1 == team1 && other.team2 == team2;
+  }
+
+  @override
+  int get hashCode => Object.hash(team1, team2);
 }
 
 final headToHeadProvider = Provider.family<HeadToHead, H2HQuery>((ref, query) {

@@ -1,3 +1,5 @@
+const int standardBallsPerOver = 6;
+
 class PlayerStats {
   const PlayerStats({
     required this.playerName,
@@ -69,7 +71,8 @@ class PlayerStats {
   final int fiveWicketHauls;
 
   // Computed bowling
-  double get economy => ballsBowled == 0 ? 0 : (runsConceded / ballsBowled) * 6;
+  double get economy =>
+      ballsBowled == 0 ? 0 : (runsConceded / ballsBowled) * standardBallsPerOver;
 
   double get bowlingAverage => wickets == 0 ? 0 : runsConceded / wickets;
 
