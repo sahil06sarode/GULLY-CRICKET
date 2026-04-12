@@ -23,8 +23,8 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
   void initState() {
     super.initState();
     final config = ref.read(matchSetupProvider);
-    _team1Controllers = _controllersFrom(config.team1Players, config.playersPerSide);
-    _team2Controllers = _controllersFrom(config.team2Players, config.playersPerSide);
+    _team1Controllers = _controllersFrom(config.team1Players, config.team1PlayerCount);
+    _team2Controllers = _controllersFrom(config.team2Players, config.team2PlayerCount);
     _team1SaveToggles = List<bool>.filled(_team1Controllers.length, false);
     _team2SaveToggles = List<bool>.filled(_team2Controllers.length, false);
   }
@@ -64,6 +64,26 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
       _team2Controllers.add(TextEditingController());
       _team2SaveToggles.add(false);
     });
+  }
+
+  void _removeTeam1Player() {
+    if (_team1Controllers.length <= 1) return;
+    final removed = _team1Controllers.last;
+    setState(() {
+      _team1Controllers.removeLast();
+      _team1SaveToggles.removeLast();
+    });
+    removed.dispose();
+  }
+
+  void _removeTeam2Player() {
+    if (_team2Controllers.length <= 1) return;
+    final removed = _team2Controllers.last;
+    setState(() {
+      _team2Controllers.removeLast();
+      _team2SaveToggles.removeLast();
+    });
+    removed.dispose();
   }
 
   void _toggleTeam1Save(int index) {
@@ -124,18 +144,16 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
 
   Future<void> _savePlayersAndNavigate() async {
     final team1 = _team1Controllers
-        .asMap()
-        .entries
-        .map((entry) => entry.value.text.trim().isEmpty ? 'Player ${entry.key + 1}' : entry.value.text.trim())
+        .map((controller) => controller.text.trim())
+        .where((name) => name.isNotEmpty)
         .toList();
     final team2 = _team2Controllers
-        .asMap()
-        .entries
-        .map((entry) => entry.value.text.trim().isEmpty ? 'Player ${entry.key + 1}' : entry.value.text.trim())
+        .map((controller) => controller.text.trim())
+        .where((name) => name.isNotEmpty)
         .toList();
-    if (team1.length != team2.length) {
+    if (team1.isEmpty || team2.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Both teams must have equal player count')),
+        const SnackBar(content: Text('Each team must have at least one player name')),
       );
       return;
     }
@@ -175,6 +193,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
                   saveToggles: _team1SaveToggles,
                   onToggleSave: _toggleTeam1Save,
                   onAddAnother: _addTeam1Player,
+                  onRemoveLast: _removeTeam1Player,
                   savedPlayers: savedPlayers,
                   onQuickAdd: _quickAddTeam1Player,
                 ),
@@ -185,6 +204,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
                   saveToggles: _team2SaveToggles,
                   onToggleSave: _toggleTeam2Save,
                   onAddAnother: _addTeam2Player,
+                  onRemoveLast: _removeTeam2Player,
                   savedPlayers: savedPlayers,
                   onQuickAdd: _quickAddTeam2Player,
                 ),
@@ -212,6 +232,7 @@ class _TeamSection extends StatelessWidget {
     required this.saveToggles,
     required this.onToggleSave,
     required this.onAddAnother,
+    required this.onRemoveLast,
     required this.savedPlayers,
     required this.onQuickAdd,
   });
@@ -221,6 +242,7 @@ class _TeamSection extends StatelessWidget {
   final List<bool> saveToggles;
   final ValueChanged<int> onToggleSave;
   final VoidCallback onAddAnother;
+  final VoidCallback onRemoveLast;
   final List<SavedPlayer> savedPlayers;
   final ValueChanged<SavedPlayer> onQuickAdd;
 
@@ -282,9 +304,17 @@ class _TeamSection extends StatelessWidget {
             ),
             Align(
               alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: controllers.length >= 11 ? null : onAddAnother,
-                child: const Text('Add another player'),
+              child: Row(
+                children: <Widget>[
+                  TextButton(
+                    onPressed: controllers.length >= 11 ? null : onAddAnother,
+                    child: const Text('Add another player'),
+                  ),
+                  TextButton(
+                    onPressed: controllers.length <= 1 ? null : onRemoveLast,
+                    child: const Text('Remove last player'),
+                  ),
+                ],
               ),
             ),
           ],

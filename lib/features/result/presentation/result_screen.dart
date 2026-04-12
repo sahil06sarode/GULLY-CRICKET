@@ -270,7 +270,9 @@ class _SummaryCard extends StatelessWidget {
               second == null ? '-' : '${second.score} in ${_oversText(second, match.rules.ballsPerOver)}',
             ),
             const Divider(height: 20),
-            Text('Match type: ${match.rules.totalOvers} overs per side'),
+            Text(
+              '${match.team1Name} (${match.team1Players.length}) vs ${match.team2Name} (${match.team2Players.length}) — ${match.rules.totalOvers} overs',
+            ),
             const SizedBox(height: 4),
             Text('Date: $formatDate'),
           ],
@@ -357,7 +359,6 @@ class _ScorecardExpansion extends StatelessWidget {
                     DataColumn(label: Text('Dismissal')),
                   ],
                   rows: batting
-                      .where((p) => p.ballsFaced > 0 || p.isOut || p.isRetired || p.runsScored > 0)
                       .map(
                         (p) => DataRow(
                           cells: <DataCell>[

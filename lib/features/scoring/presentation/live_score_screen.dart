@@ -401,6 +401,13 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
       nonStrikerId: innings.currentNonStrikerId,
       reEntryAllowed: match.rules.reEntryAllowed,
       title: striker ? 'Select striker' : 'Select non-striker',
+      onNoAvailable: () async {
+        final updated = await ref.read(activeMatchProvider.notifier).triggerInningsEndIfNeeded();
+        if (updated != null && updated.currentInnings?.isCompleted == true) {
+          await _broadcastIfHosting();
+          await _handleInningsComplete(updated);
+        }
+      },
     );
     _sheetOpen = false;
     if (selected == null) return false;
@@ -800,7 +807,11 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                                       const ListTile(title: Text('Match Settings')),
                                       ListTile(title: Text('Overs: ${match.rules.totalOvers}')),
                                       ListTile(title: Text('Balls/Over: ${match.rules.ballsPerOver}')),
-                                      ListTile(title: Text('Players: ${match.rules.totalPlayers}')),
+                                      ListTile(
+                                        title: Text(
+                                          'Players: ${match.rules.team1Players} vs ${match.rules.team2Players}',
+                                        ),
+                                      ),
                                       SwitchListTile(
                                         title: const Text('Sound Effects'),
                                         value: soundEnabled,

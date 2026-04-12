@@ -28,14 +28,15 @@ class GullyRulesAdapter extends TypeAdapter<GullyRules> {
       maxOversPerBowler: fields[14] as int,
       ballsPerOver: fields[15] as int,
       totalOvers: fields[16] as int,
-      totalPlayers: fields[17] as int,
+      team1Players: (fields[17] as int?) ?? (fields[18] as int?) ?? 6,
+      team2Players: (fields[18] as int?) ?? (fields[17] as int?) ?? 6,
     );
   }
 
   @override
   void write(BinaryWriter writer, GullyRules obj) {
     writer
-      ..writeByte(18)
+      ..writeByte(19)
       ..writeByte(0)
       ..write(obj.halfCenturyRetire)
       ..writeByte(1)
@@ -71,6 +72,8 @@ class GullyRulesAdapter extends TypeAdapter<GullyRules> {
       ..writeByte(16)
       ..write(obj.totalOvers)
       ..writeByte(17)
-      ..write(obj.totalPlayers);
+      ..write(obj.team1Players)
+      ..writeByte(18)
+      ..write(obj.team2Players);
   }
 }
