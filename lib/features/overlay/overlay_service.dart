@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:system_alert_window/system_alert_window.dart' as saw;
 
 class OverlayService {
+  static const int _overlayHeight = 72;
+  static const int _overlayWidth = 240;
+
   static Future<bool> hasPermission() async {
     final allowed = await saw.SystemAlertWindow.checkPermissions(prefMode: saw.SystemWindowPrefMode.OVERLAY);
     return allowed ?? false;
@@ -17,8 +20,8 @@ class OverlayService {
     final header = _buildHeader(data);
     final body = _buildBody(data);
     await saw.SystemAlertWindow.showSystemWindow(
-      height: 72,
-      width: 240,
+      height: _overlayHeight,
+      width: _overlayWidth,
       header: header,
       body: body,
       gravity: saw.SystemWindowGravity.TOP,
@@ -33,8 +36,8 @@ class OverlayService {
     final header = _buildHeader(data);
     final body = _buildBody(data);
     await saw.SystemAlertWindow.updateSystemWindow(
-      height: 72,
-      width: 240,
+      height: _overlayHeight,
+      width: _overlayWidth,
       header: header,
       body: body,
       gravity: saw.SystemWindowGravity.TOP,
