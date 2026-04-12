@@ -56,6 +56,7 @@ class _HostLobbyScreenState extends ConsumerState<HostLobbyScreen> {
   Widget build(BuildContext context) {
     final host = ref.watch(hostServiceProvider);
     final match = ref.watch(activeMatchProvider);
+    final qrSize = (MediaQuery.of(context).size.width * 0.55).clamp(160.0, 240.0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Host Match')),
@@ -120,7 +121,7 @@ class _HostLobbyScreenState extends ConsumerState<HostLobbyScreen> {
                             child: _modeIndex == 0
                                 ? QrImageView(
                                     data: host.buildQrData(match?.id),
-                                    size: 240,
+                                    size: qrSize,
                                     foregroundColor: Colors.white,
                                     backgroundColor: AppColors.surface,
                                   )

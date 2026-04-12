@@ -43,11 +43,9 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
   Timer? _undoTimer;
   Timer? _celebrationTimer;
   Timer? _wicketFlashTimer;
+  OverlayEntry? _celebrationOverlay;
   bool _bootstrapped = false;
   bool _sheetOpen = false;
-  String? _celebrationText;
-  Color _celebrationColor = Colors.white;
-  double _celebrationFontSize = 48;
   bool _showWicketFlash = false;
 
   @override
@@ -61,6 +59,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     _undoTimer?.cancel();
     _celebrationTimer?.cancel();
     _wicketFlashTimer?.cancel();
+    _removeCelebrationOverlay();
     super.dispose();
   }
 
@@ -153,11 +152,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     if (wicketType == 'retired') {
       await ref.read(activeMatchProvider.notifier).retireBatsman(batsmanId);
       await _broadcastIfHosting();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Batsman retired. Select next batsman.')),
-        );
-      }
+      _showTopSnackBar('Batsman retired. Select next batsman.');
       await _selectNextBatsman(striker: true);
       return;
     }
@@ -189,16 +184,61 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     required Duration duration,
   }) {
     _celebrationTimer?.cancel();
+    _removeCelebrationOverlay();
     if (!mounted) return;
-    setState(() {
-      _celebrationText = text;
-      _celebrationColor = color;
-      _celebrationFontSize = fontSize;
+    final overlayState = Overlay.of(context);
+    final topOffset = MediaQuery.of(context).size.height * 0.35;
+    _celebrationOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        top: topOffset,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: IgnorePointer(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: fontSize,
+                  ),
+            )
+                .animate()
+                .fadeIn(duration: 200.ms)
+                .then(delay: duration)
+                .fadeOut(duration: 300.ms),
+          ),
+        ),
+      ),
+    );
+    overlayState.insert(_celebrationOverlay!);
+    _celebrationTimer = Timer(duration + const Duration(milliseconds: 500), () {
+      _removeCelebrationOverlay();
     });
-    _celebrationTimer = Timer(duration, () {
-      if (!mounted) return;
-      setState(() => _celebrationText = null);
-    });
+  }
+
+  void _removeCelebrationOverlay() {
+    _celebrationOverlay?.remove();
+    _celebrationOverlay = null;
+  }
+
+  void _showTopSnackBar(String message) {
+    if (!mounted) return;
+    final screenHeight = MediaQuery.of(context).size.height;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(
+            bottom: screenHeight * 0.72,
+            left: 16,
+            right: 16,
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
   }
 
   Future<void> _triggerFourCelebration() async {
@@ -254,9 +294,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
         if (mounted) setState(() => _undoArmed = false);
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tap again to confirm undo')),
-        );
+        _showTopSnackBar('Tap again to confirm undo');
       }
       return;
     }
@@ -296,11 +334,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
       final autoRetired =
           beforeBatter != null && afterBatter != null && !beforeBatter.isRetired && afterBatter.isRetired;
       if (autoRetired) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('${afterBatter.name} has retired! Select next batsman')),
-          );
-        }
+        _showTopSnackBar('${afterBatter.name} has retired! Select next batsman');
         await _selectNextBatsman(striker: true);
       }
     }
@@ -311,11 +345,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     final innings = match.currentInnings;
     if (innings == null) return;
     if (innings.inningsNumber == 1) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Innings complete. Starting second innings...')),
-        );
-      }
+      _showTopSnackBar('Innings complete. Starting second innings...');
       final second = await ref.read(activeMatchProvider.notifier).startSecondInnings();
       if (second != null) {
         await _broadcastIfHosting();
@@ -575,31 +605,33 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Text('Not hosting yet'),
-              const SizedBox(height: 8),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  await host.startServer(match);
-                  host.broadcastMatchState(match);
-                  if (mounted) {
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Hosting started at ${host.hostIp}')),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.wifi_tethering),
-                label: const Text('Start Hosting'),
-              ),
-            ],
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Text('Not hosting yet'),
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    await host.startServer(match);
+                    host.broadcastMatchState(match);
+                    if (mounted) {
+                      Navigator.of(context).pop();
+                      _showTopSnackBar('Hosting started at ${host.hostIp}');
+                    }
+                  },
+                  icon: const Icon(Icons.wifi_tethering),
+                  label: const Text('Start Hosting'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -634,6 +666,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
 
     return Scaffold(
       body: SafeArea(
+        bottom: false,
         child: Stack(
           children: <Widget>[
             Column(
@@ -646,9 +679,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                       children: <Widget>[
                         IconButton(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Menu coming soon')),
-                            );
+                            _showTopSnackBar('Menu coming soon');
                           },
                           icon: const Icon(Icons.menu),
                         ),
@@ -735,51 +766,58 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                 ),
                 SizedBox(
                   height: 48,
-                  child: QuickActionBar(
-                    partnership: partnershipText,
-                    onSwap: () async {
-                      final strikerId = innings.currentBatsmanId;
-                      final nonId = innings.currentNonStrikerId;
-                      if (strikerId == null || nonId == null) return;
-                      await ref.read(activeMatchProvider.notifier).swapStrike();
-                      await _broadcastIfHosting();
-                    },
-                    onSettings: () async {
-                      await showModalBottomSheet<void>(
-                        context: context,
-                        showDragHandle: true,
-                        builder: (context) => SafeArea(
-                          child: ValueListenableBuilder<Box<dynamic>>(
-                            valueListenable:
-                                Hive.box<dynamic>(
-                                  HiveKeys.settingsBox,
-                                ).listenable(keys: const <String>['sound_enabled']),
-                            builder: (context, settings, _) {
-                              final soundEnabled =
-                                  (settings.get('sound_enabled', defaultValue: true) as bool?) ??
-                                  true;
-                              return ListView(
-                                shrinkWrap: true,
-                                children: <Widget>[
-                                  const ListTile(title: Text('Match Settings')),
-                                  ListTile(title: Text('Overs: ${match.rules.totalOvers}')),
-                                  ListTile(title: Text('Balls/Over: ${match.rules.ballsPerOver}')),
-                                  ListTile(title: Text('Players: ${match.rules.totalPlayers}')),
-                                  SwitchListTile(
-                                    title: const Text('Sound Effects'),
-                                    value: soundEnabled,
-                                    onChanged: (value) async {
-                                      await ref.read(soundServiceProvider).setEnabled(value);
-                                    },
-                                  ),
-                                ],
-                              );
-                            },
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
+                    child: QuickActionBar(
+                      partnership: partnershipText,
+                      onSwap: () async {
+                        final strikerId = innings.currentBatsmanId;
+                        final nonId = innings.currentNonStrikerId;
+                        if (strikerId == null || nonId == null) return;
+                        await ref.read(activeMatchProvider.notifier).swapStrike();
+                        await _broadcastIfHosting();
+                      },
+                      onSettings: () async {
+                        await showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          showDragHandle: true,
+                          builder: (context) => Padding(
+                            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                            child: SafeArea(
+                              child: ValueListenableBuilder<Box<dynamic>>(
+                                valueListenable:
+                                    Hive.box<dynamic>(
+                                      HiveKeys.settingsBox,
+                                    ).listenable(keys: const <String>['sound_enabled']),
+                                builder: (context, settings, _) {
+                                  final soundEnabled =
+                                      (settings.get('sound_enabled', defaultValue: true) as bool?) ??
+                                      true;
+                                  return ListView(
+                                    shrinkWrap: true,
+                                    children: <Widget>[
+                                      const ListTile(title: Text('Match Settings')),
+                                      ListTile(title: Text('Overs: ${match.rules.totalOvers}')),
+                                      ListTile(title: Text('Balls/Over: ${match.rules.ballsPerOver}')),
+                                      ListTile(title: Text('Players: ${match.rules.totalPlayers}')),
+                                      SwitchListTile(
+                                        title: const Text('Sound Effects'),
+                                        value: soundEnabled,
+                                        onChanged: (value) async {
+                                          await ref.read(soundServiceProvider).setEnabled(value);
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    onWifi: _showWifiInfo,
+                        );
+                      },
+                      onWifi: _showWifiInfo,
+                    ),
                   ),
                 ),
               ],
@@ -788,25 +826,6 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: Container(color: AppColors.wicketRed.withOpacity(0.1)),
-                ),
-              ),
-            if (_celebrationText != null)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: Center(
-                    child: Text(
-                      _celebrationText!,
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                            color: _celebrationColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: _celebrationFontSize,
-                          ),
-                    )
-                        .animate(key: ValueKey<String>(_celebrationText!))
-                        .fadeIn(duration: 120.ms)
-                        .then(delay: 900.ms)
-                        .fadeOut(duration: 350.ms),
-                  ),
                 ),
               ),
           ],
