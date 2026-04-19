@@ -26,14 +26,26 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
   String? _team2SavedId;
   List<String> _team1PresetPlayers = const <String>[];
   List<String> _team2PresetPlayers = const <String>[];
-  bool _editPlayersAfterSaved = false;
 
   @override
   void initState() {
     super.initState();
     final config = ref.read(matchSetupProvider);
-    _team1Controller = TextEditingController(text: config.team1Name);
-    _team2Controller = TextEditingController(text: config.team2Name);
+    final team1Text = config.team1Name == 'Team A' ? '' : config.team1Name;
+    final team2Text = config.team2Name == 'Team B' ? '' : config.team2Name;
+    _team1Controller = TextEditingController(text: team1Text);
+    _team2Controller = TextEditingController(text: team2Text);
+    final teams = ref.read(teamsProvider);
+    for (final team in teams) {
+      if (team.name == team1Text) {
+        _team1SavedId = team.id;
+        _team1PresetPlayers = team.playerNames.where((name) => name.trim().isNotEmpty).toList();
+      }
+      if (team.name == team2Text) {
+        _team2SavedId = team.id;
+        _team2PresetPlayers = team.playerNames.where((name) => name.trim().isNotEmpty).toList();
+      }
+    }
     _totalOvers = config.totalOvers;
     _ballsPerOver = config.ballsPerOver;
     _team1PlayerCount = config.team1PlayerCount;
@@ -57,6 +69,18 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
       ).showSnackBar(const SnackBar(content: Text('Team names cannot be empty')));
       return;
     }
+    if (_team1SavedId == null || _team2SavedId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select both saved teams')));
+      return;
+    }
+    if (team1 == team2) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Both teams cannot be the same')));
+      return;
+    }
 
     final team1Players = _team1PresetPlayers.isEmpty
         ? List<String>.filled(_team1PlayerCount, '')
@@ -76,50 +100,132 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
       team2PlayerCount: _team2PlayerCount,
       enableToss: _enableToss,
     );
-
-    final bothSaved = _team1SavedId != null && _team2SavedId != null;
-    if (bothSaved && !_editPlayersAfterSaved) {
-      context.push('/rules');
-      return;
-    }
     context.push('/setup/teams');
   }
 
   void _selectSavedTeam({required TeamModel team, required bool isTeam1}) {
     final players = team.playerNames.where((name) => name.trim().isNotEmpty).toList();
-    final count = players.isEmpty ? 1 : players.length.clamp(1, 11).toInt();
+    final otherId = isTeam1 ? _team2SavedId : _team1SavedId;
+    if (otherId == team.id) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Both teams cannot be the same')));
+      return;
+    }
     setState(() {
       if (isTeam1) {
         _team1SavedId = team.id;
         _team1Controller.text = team.name;
-        _team1PlayerCount = count;
         _team1PresetPlayers = players;
       } else {
         _team2SavedId = team.id;
         _team2Controller.text = team.name;
-        _team2PlayerCount = count;
         _team2PresetPlayers = players;
       }
     });
   }
 
-  void _clearSavedTeam(bool isTeam1) {
-    setState(() {
-      if (isTeam1) {
-        _team1SavedId = null;
-        _team1PresetPlayers = const <String>[];
-      } else {
-        _team2SavedId = null;
-        _team2PresetPlayers = const <String>[];
-      }
-    });
+  Future<void> _openTeamPicker({required bool isTeam1}) async {
+    final teams = ref.read(teamsProvider);
+    final selectedOtherId = isTeam1 ? _team2SavedId : _team1SavedId;
+    await showModalBottomSheet<void>(
+      context: context,
+      isDismissible: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  isTeam1 ? 'Select Team A' : 'Select Team B',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: teams.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Text('No saved teams yet. Create one below.'),
+                          ),
+                        )
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: teams.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final team = teams[index];
+                            final isDisabled = team.id == selectedOtherId;
+                            final playerCount = team.playerNames
+                                .where((name) => name.trim().isNotEmpty)
+                                .length;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: isDisabled
+                                      ? Theme.of(context).disabledColor.withOpacity(0.12)
+                                      : null,
+                                ),
+                              child: ListTile(
+                                minVerticalPadding: 12,
+                                enabled: !isDisabled,
+                                onTap: isDisabled
+                                    ? null
+                                    : () {
+                                        Navigator.of(sheetContext).pop();
+                                        _selectSavedTeam(team: team, isTeam1: isTeam1);
+                                      },
+                                title: Text(
+                                  team.name,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: isDisabled ? Colors.grey : null,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  '$playerCount players',
+                                  style: TextStyle(color: isDisabled ? Colors.grey : null),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+                const SizedBox(height: 8),
+                const Divider(),
+                ListTile(
+                  minVerticalPadding: 12,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: const Icon(Icons.add_circle_outline, color: Colors.greenAccent),
+                  title: const Text(
+                    '➕ Create New Team',
+                    style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    context.push('/teams/create');
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final teams = ref.watch(teamsProvider);
-    final bothSavedSelected = _team1SavedId != null && _team2SavedId != null;
-
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('New Match')),
@@ -131,44 +237,39 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
               children: <Widget>[
                 Text('Match Settings', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Load saved team?', style: Theme.of(context).textTheme.titleMedium),
-                ),
-                const SizedBox(height: 8),
-                _SavedTeamChips(
-                  title: 'Team A',
-                  teams: teams,
-                  selectedTeamId: _team1SavedId,
-                  onSelect: (team) => _selectSavedTeam(team: team, isTeam1: true),
-                  onClear: () => _clearSavedTeam(true),
-                ),
-                const SizedBox(height: 6),
-                _SavedTeamChips(
-                  title: 'Team B',
-                  teams: teams,
-                  selectedTeamId: _team2SavedId,
-                  onSelect: (team) => _selectSavedTeam(team: team, isTeam1: false),
-                  onClear: () => _clearSavedTeam(false),
-                ),
-                const SizedBox(height: 8),
-                if (bothSavedSelected)
-                  CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    value: _editPlayersAfterSaved,
-                    title: const Text('Edit Players?'),
-                    onChanged: (value) => setState(() => _editPlayersAfterSaved = value ?? false),
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Column(
+                      children: <Widget>[
+                        TextField(
+                          controller: _team1Controller,
+                          readOnly: true,
+                          showCursor: false,
+                          onTap: () => _openTeamPicker(isTeam1: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Team 1 Name',
+                            hintText: 'Tap to select team',
+                            suffixIcon: Icon(Icons.arrow_drop_down),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _team2Controller,
+                          readOnly: true,
+                          showCursor: false,
+                          onTap: () => _openTeamPicker(isTeam1: false),
+                          decoration: const InputDecoration(
+                            labelText: 'Team 2 Name',
+                            hintText: 'Tap to select team',
+                            suffixIcon: Icon(Icons.arrow_drop_down),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _team1Controller,
-                  decoration: const InputDecoration(labelText: 'Team 1 Name'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _team2Controller,
-                  decoration: const InputDecoration(labelText: 'Team 2 Name'),
                 ),
                 const SizedBox(height: 16),
                 Row(
@@ -282,11 +383,7 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
                   height: 56,
                   child: ElevatedButton(
                     onPressed: _handleNext,
-                    child: Text(
-                      bothSavedSelected && !_editPlayersAfterSaved
-                          ? 'Next: Rules →'
-                          : 'Next: Add Players →',
-                    ),
+                    child: const Text('Next: Add Players →'),
                   ),
                 ),
               ],
@@ -294,61 +391,6 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SavedTeamChips extends StatelessWidget {
-  const _SavedTeamChips({
-    required this.title,
-    required this.teams,
-    required this.selectedTeamId,
-    required this.onSelect,
-    required this.onClear,
-  });
-
-  final String title;
-  final List<TeamModel> teams;
-  final String? selectedTeamId;
-  final ValueChanged<TeamModel> onSelect;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(title, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: <Widget>[
-              ...teams.map(
-                (team) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    selected: selectedTeamId == team.id,
-                    label: Text(team.name),
-                    onSelected: (_) => onSelect(team),
-                  ),
-                ),
-              ),
-              ActionChip(
-                label: const Text('+ New Team'),
-                onPressed: () => context.push('/teams/create'),
-              ),
-              if (selectedTeamId != null) ...<Widget>[
-                const SizedBox(width: 8),
-                ActionChip(
-                  label: const Text('Clear'),
-                  onPressed: onClear,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

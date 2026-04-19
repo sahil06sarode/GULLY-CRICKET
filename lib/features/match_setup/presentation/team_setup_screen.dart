@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../players/domain/saved_player_model.dart';
-import '../../players/services/saved_players_service.dart';
+import '../../teams/domain/team_model.dart';
+import '../../teams/services/teams_service.dart';
 import 'match_setup_notifier.dart';
 
 class TeamSetupScreen extends ConsumerStatefulWidget {
@@ -14,215 +14,325 @@ class TeamSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
-  late List<TextEditingController> _team1Controllers;
-  late List<TextEditingController> _team2Controllers;
-  late List<bool> _team1SaveToggles;
-  late List<bool> _team2SaveToggles;
-  String _team1SearchQuery = '';
-  String _team2SearchQuery = '';
+  static const int _maxSelectedPlayers = 15;
+  late List<String> _team1Squad;
+  late List<String> _team2Squad;
+  late Set<String> _team1Selected;
+  late Set<String> _team2Selected;
 
   @override
   void initState() {
     super.initState();
     final config = ref.read(matchSetupProvider);
-    _team1Controllers = _controllersFrom(config.team1Players, config.team1PlayerCount);
-    _team2Controllers = _controllersFrom(config.team2Players, config.team2PlayerCount);
-    _team1SaveToggles = List<bool>.filled(_team1Controllers.length, false);
-    _team2SaveToggles = List<bool>.filled(_team2Controllers.length, false);
-  }
+    final teams = ref.read(teamsProvider);
+    final team1Model = _findTeamByName(config.team1Name, teams);
+    final team2Model = _findTeamByName(config.team2Name, teams);
 
-  List<TextEditingController> _controllersFrom(List<String> players, int fallbackCount) {
-    if (players.isNotEmpty) {
-      return players.map((name) => TextEditingController(text: name)).toList();
+    _team1Squad = _sanitizePlayers(team1Model?.playerNames ?? config.team1Players);
+    _team2Squad = _sanitizePlayers(team2Model?.playerNames ?? config.team2Players);
+
+    if (_team1Squad.isEmpty) {
+      _team1Squad = <String>[];
     }
-    return List<TextEditingController>.generate(
-      fallbackCount,
-      (_) => TextEditingController(),
-    );
-  }
-
-  @override
-  void dispose() {
-    for (final controller in _team1Controllers) {
-      controller.dispose();
+    if (_team2Squad.isEmpty) {
+      _team2Squad = <String>[];
     }
-    for (final controller in _team2Controllers) {
-      controller.dispose();
+
+    _team1Selected = _deriveInitialSelection(config.team1Players, _team1Squad);
+    _team2Selected = _deriveInitialSelection(config.team2Players, _team2Squad);
+  }
+
+  TeamModel? _findTeamByName(String teamName, List<TeamModel> teams) {
+    final target = teamName.trim().toLowerCase();
+    for (final team in teams) {
+      if (team.name.trim().toLowerCase() == target) {
+        return team;
+      }
     }
-    super.dispose();
+    return null;
   }
 
-  void _addTeam1Player() {
-    if (_team1Controllers.length >= 11) return;
-    setState(() {
-      _team1Controllers.add(TextEditingController());
-      _team1SaveToggles.add(false);
-    });
+  List<String> _sanitizePlayers(List<String> players) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final name in players) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) continue;
+      final key = trimmed.toLowerCase();
+      if (seen.add(key)) {
+        result.add(trimmed);
+      }
+    }
+    return result;
   }
 
-  void _addTeam2Player() {
-    if (_team2Controllers.length >= 11) return;
-    setState(() {
-      _team2Controllers.add(TextEditingController());
-      _team2SaveToggles.add(false);
-    });
+  Set<String> _deriveInitialSelection(List<String> preferred, List<String> squad) {
+    final selected = <String>{};
+    for (final player in preferred) {
+      final trimmed = player.trim();
+      if (trimmed.isEmpty) continue;
+      if (squad.contains(trimmed)) {
+        selected.add(trimmed);
+      }
+      if (selected.length == _maxSelectedPlayers) {
+        return selected;
+      }
+    }
+    if (selected.isEmpty) {
+      selected.addAll(squad.take(_maxSelectedPlayers));
+    }
+    return selected;
   }
 
-  void _removeTeam1Player() {
-    if (_team1Controllers.length <= 1) return;
-    final removed = _team1Controllers.last;
-    setState(() {
-      _team1Controllers.removeLast();
-      _team1SaveToggles.removeLast();
-    });
-    removed.dispose();
-  }
-
-  void _removeTeam2Player() {
-    if (_team2Controllers.length <= 1) return;
-    final removed = _team2Controllers.last;
-    setState(() {
-      _team2Controllers.removeLast();
-      _team2SaveToggles.removeLast();
-    });
-    removed.dispose();
-  }
-
-  void _toggleTeam1Save(int index) {
-    if (index < 0 || index >= _team1SaveToggles.length) return;
-    setState(() => _team1SaveToggles[index] = !_team1SaveToggles[index]);
-  }
-
-  void _toggleTeam2Save(int index) {
-    if (index < 0 || index >= _team2SaveToggles.length) return;
-    setState(() => _team2SaveToggles[index] = !_team2SaveToggles[index]);
-  }
-
-  void _quickAddTeam1Player(SavedPlayer player) {
-    _quickAddPlayer(
-      playerName: player.name,
-      controllers: _team1Controllers,
-      saveToggles: _team1SaveToggles,
+  Future<void> _showAddPlayerDialog({required bool isTeam1}) async {
+    final controller = TextEditingController();
+    final teamName = isTeam1
+        ? ref.read(matchSetupProvider).team1Name
+        : ref.read(matchSetupProvider).team2Name;
+    final addedName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Player'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Player name'),
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+              Navigator.of(context).pop(value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
+    controller.dispose();
+
+    if (!mounted || addedName == null) return;
+    final saved = await _addPlayerToTeam(teamName: teamName, playerName: addedName, isTeam1: isTeam1);
+    if (!saved && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to save player to squad')));
+    }
   }
 
-  void _quickAddTeam2Player(SavedPlayer player) {
-    _quickAddPlayer(
-      playerName: player.name,
-      controllers: _team2Controllers,
-      saveToggles: _team2SaveToggles,
-    );
-  }
-
-  void _quickAddPlayer({
+  Future<bool> _addPlayerToTeam({
+    required String teamName,
     required String playerName,
-    required List<TextEditingController> controllers,
-    required List<bool> saveToggles,
-  }) {
+    required bool isTeam1,
+  }) async {
     final trimmed = playerName.trim();
-    if (trimmed.isEmpty) return;
-    var added = false;
+    if (trimmed.isEmpty) return false;
+    final teamsNotifier = ref.read(teamsProvider.notifier);
+    final teams = ref.read(teamsProvider);
+    final team = _findTeamByName(teamName, teams);
+    if (team == null) return false;
+
+    final current = _sanitizePlayers(team.playerNames);
+    final exists = current.any((name) => name.toLowerCase() == trimmed.toLowerCase());
+    if (exists) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Player already exists in squad')),
+        );
+      }
+      return false;
+    }
+
+    final updated = team.copyWith(playerNames: <String>[...current, trimmed]);
+    final saved = await teamsNotifier.saveTeam(updated);
+    if (!saved) return false;
     setState(() {
-      for (final controller in controllers) {
-        if (controller.text.trim().isEmpty) {
-          controller.text = trimmed;
-          added = true;
-          return;
+      if (isTeam1) {
+        _team1Squad = <String>[..._team1Squad, trimmed];
+      } else {
+        _team2Squad = <String>[..._team2Squad, trimmed];
+      }
+    });
+    return true;
+  }
+
+  Future<void> _confirmDeletePlayer({
+    required bool isTeam1,
+    required String playerName,
+  }) async {
+    final shouldRemove = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove player'),
+        content: Text('Remove $playerName from squad?'),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (shouldRemove != true || !mounted) return;
+
+    final teamName = isTeam1
+        ? ref.read(matchSetupProvider).team1Name
+        : ref.read(matchSetupProvider).team2Name;
+    final removed = await _removePlayerFromTeam(
+      teamName: teamName,
+      playerName: playerName,
+      isTeam1: isTeam1,
+    );
+    if (!removed && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Failed to remove player')));
+    }
+  }
+
+  Future<bool> _removePlayerFromTeam({
+    required String teamName,
+    required String playerName,
+    required bool isTeam1,
+  }) async {
+    final teamsNotifier = ref.read(teamsProvider.notifier);
+    final teams = ref.read(teamsProvider);
+    final team = _findTeamByName(teamName, teams);
+    if (team == null) return false;
+
+    final updatedRoster = _sanitizePlayers(team.playerNames)
+        .where((name) => name.toLowerCase() != playerName.toLowerCase())
+        .toList();
+    final updated = team.copyWith(playerNames: updatedRoster);
+    final saved = await teamsNotifier.saveTeam(updated);
+    if (!saved) return false;
+
+    setState(() {
+      if (isTeam1) {
+        _team1Squad.removeWhere((name) => name.toLowerCase() == playerName.toLowerCase());
+        _team1Selected.removeWhere((name) => name.toLowerCase() == playerName.toLowerCase());
+      } else {
+        _team2Squad.removeWhere((name) => name.toLowerCase() == playerName.toLowerCase());
+        _team2Selected.removeWhere((name) => name.toLowerCase() == playerName.toLowerCase());
+      }
+    });
+    return true;
+  }
+
+  void _toggleSelection({
+    required bool isTeam1,
+    required String playerName,
+    required bool checked,
+  }) {
+    final selected = isTeam1 ? _team1Selected : _team2Selected;
+    if (checked && selected.length >= _maxSelectedPlayers) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Maximum 15 players allowed')));
+      return;
+    }
+    setState(() {
+      if (isTeam1) {
+        if (checked) {
+          _team1Selected.add(playerName);
+        } else {
+          _team1Selected.remove(playerName);
+        }
+      } else {
+        if (checked) {
+          _team2Selected.add(playerName);
+        } else {
+          _team2Selected.remove(playerName);
         }
       }
-      if (controllers.length < 11) {
-        controllers.add(TextEditingController(text: trimmed));
-        saveToggles.add(false);
-        added = true;
-        return;
-      }
     });
-    if (!added) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 11 players allowed per team')),
-      );
-    }
   }
 
   Future<void> _savePlayersAndNavigate() async {
-    final team1 = _team1Controllers
-        .map((controller) => controller.text.trim())
-        .where((name) => name.isNotEmpty)
-        .toList();
-    final team2 = _team2Controllers
-        .map((controller) => controller.text.trim())
-        .where((name) => name.isNotEmpty)
-        .toList();
-    if (team1.isEmpty || team2.isEmpty) {
+    if (_team1Selected.length != _maxSelectedPlayers ||
+        _team2Selected.length != _maxSelectedPlayers) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Each team must have at least one player name')),
+        const SnackBar(content: Text('Select exactly 15 players for each team')),
       );
       return;
     }
-
-    final savedPlayers = ref.read(savedPlayersProvider.notifier);
-    for (final entry in _team1Controllers.asMap().entries) {
-      if (_team1SaveToggles[entry.key]) {
-        await savedPlayers.savePlayer(entry.value.text.trim());
-      }
-    }
-    for (final entry in _team2Controllers.asMap().entries) {
-      if (_team2SaveToggles[entry.key]) {
-        await savedPlayers.savePlayer(entry.value.text.trim());
-      }
-    }
-
-    ref.read(matchSetupProvider.notifier).updateTeamPlayers(team1Players: team1, team2Players: team2);
+    final team1 = _team1Squad.where(_team1Selected.contains).toList();
+    final team2 = _team2Squad.where(_team2Selected.contains).toList();
+    ref.read(matchSetupProvider.notifier).updateTeamPlayers(
+      team1Players: team1,
+      team2Players: team2,
+    );
     if (mounted) context.push('/rules');
   }
 
   @override
   Widget build(BuildContext context) {
     final config = ref.watch(matchSetupProvider);
-    final savedPlayers = ref.watch(savedPlayersProvider);
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Add Players')),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: <Widget>[
-                _TeamSection(
-                  teamName: config.team1Name,
-                  controllers: _team1Controllers,
-                  saveToggles: _team1SaveToggles,
-                  onToggleSave: _toggleTeam1Save,
-                  onAddAnother: _addTeam1Player,
-                  onRemoveLast: _removeTeam1Player,
-                  savedPlayers: savedPlayers,
-                  searchQuery: _team1SearchQuery,
-                  onSearchChanged: (value) => setState(() => _team1SearchQuery = value),
-                  onQuickAdd: _quickAddTeam1Player,
-                ),
-                const SizedBox(height: 20),
-                _TeamSection(
-                  teamName: config.team2Name,
-                  controllers: _team2Controllers,
-                  saveToggles: _team2SaveToggles,
-                  onToggleSave: _toggleTeam2Save,
-                  onAddAnother: _addTeam2Player,
-                  onRemoveLast: _removeTeam2Player,
-                  savedPlayers: savedPlayers,
-                  searchQuery: _team2SearchQuery,
-                  onSearchChanged: (value) => setState(() => _team2SearchQuery = value),
-                  onQuickAdd: _quickAddTeam2Player,
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _savePlayersAndNavigate,
-                    child: const Text('Next: Set Rules →'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: ListView(
+            children: <Widget>[
+              _TeamSquadCard(
+                teamName: config.team1Name,
+                squad: _team1Squad,
+                selected: _team1Selected,
+                onToggle: (player, checked) =>
+                    _toggleSelection(isTeam1: true, playerName: player, checked: checked),
+                onAddNew: () => _showAddPlayerDialog(isTeam1: true),
+                onDelete: (player) => _confirmDeletePlayer(isTeam1: true, playerName: player),
+              ),
+              const SizedBox(height: 16),
+              _TeamSquadCard(
+                teamName: config.team2Name,
+                squad: _team2Squad,
+                selected: _team2Selected,
+                onToggle: (player, checked) =>
+                    _toggleSelection(isTeam1: false, playerName: player, checked: checked),
+                onAddNew: () => _showAddPlayerDialog(isTeam1: false),
+                onDelete: (player) => _confirmDeletePlayer(isTeam1: false, playerName: player),
+              ),
+              const SizedBox(height: 90),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
+          child: Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(child: Text('${config.team1Name}: ${_team1Selected.length} / 15 selected')),
+                      Expanded(
+                        child: Text(
+                          '${config.team2Name}: ${_team2Selected.length} / 15 selected',
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 52,
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _savePlayersAndNavigate,
+                      child: const Text('Next: Set Rules →'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -231,114 +341,122 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
   }
 }
 
-class _TeamSection extends StatelessWidget {
-  const _TeamSection({
+class _TeamSquadCard extends StatelessWidget {
+  const _TeamSquadCard({
     required this.teamName,
-    required this.controllers,
-    required this.saveToggles,
-    required this.onToggleSave,
-    required this.onAddAnother,
-    required this.onRemoveLast,
-    required this.savedPlayers,
-    required this.searchQuery,
-    required this.onSearchChanged,
-    required this.onQuickAdd,
+    required this.squad,
+    required this.selected,
+    required this.onToggle,
+    required this.onAddNew,
+    required this.onDelete,
   });
 
   final String teamName;
-  final List<TextEditingController> controllers;
-  final List<bool> saveToggles;
-  final ValueChanged<int> onToggleSave;
-  final VoidCallback onAddAnother;
-  final VoidCallback onRemoveLast;
-  final List<SavedPlayer> savedPlayers;
-  final String searchQuery;
-  final ValueChanged<String> onSearchChanged;
-  final ValueChanged<SavedPlayer> onQuickAdd;
+  final List<String> squad;
+  final Set<String> selected;
+  final void Function(String playerName, bool checked) onToggle;
+  final VoidCallback onAddNew;
+  final ValueChanged<String> onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final query = searchQuery.trim().toLowerCase();
-    final filteredPlayers = query.isEmpty
-        ? savedPlayers
-        : savedPlayers.where((player) => player.name.toLowerCase().contains(query)).toList();
+    final isComplete = selected.length == _TeamSetupScreenState._maxSelectedPlayers;
     return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-              Text(
-                teamName,
-                style: Theme.of(context).textTheme.titleMedium,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            if (savedPlayers.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 10),
-              TextField(
-                onChanged: onSearchChanged,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search saved players',
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    teamName,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Quick add saved players',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 6),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: filteredPlayers
-                      .map(
-                        (player) => ActionChip(
-                          label: Text(player.name),
-                          avatar: player.isFavorite ? const Icon(Icons.star, size: 16) : null,
-                          onPressed: () => onQuickAdd(player),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            ...controllers.asMap().entries.map(
-              (entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: TextField(
-                  controller: entry.value,
-                  decoration: InputDecoration(
-                    labelText: 'Player ${entry.key + 1}',
-                    hintText: 'Player ${entry.key + 1}',
-                    suffixIcon: IconButton(
-                      onPressed: () => onToggleSave(entry.key),
-                      tooltip: 'Save player for future matches',
-                      icon: Icon(
-                        saveToggles[entry.key] ? Icons.bookmark : Icons.bookmark_border,
-                      ),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    color: isComplete ? Colors.green.withOpacity(0.15) : null,
+                  ),
+                  child: Text(
+                    '${selected.length} / 15 selected',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: isComplete ? Colors.greenAccent : null,
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                children: <Widget>[
-                  TextButton(
-                    onPressed: controllers.length >= 11 ? null : onAddAnother,
-                    child: const Text('Add another player'),
+            const SizedBox(height: 8),
+            if (isComplete)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Squad complete! ✅',
+                  style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.w600),
+                ),
+              ),
+            const SizedBox(height: 8),
+            if (squad.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text('No players in squad yet. Add one below.'),
+                ),
+              )
+            else
+              ...squad.map((player) {
+                final checked = selected.contains(player);
+                final disabled = !checked && isComplete;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: disabled ? Theme.of(context).disabledColor.withOpacity(0.12) : null,
                   ),
-                  TextButton(
-                    onPressed: controllers.length <= 1 ? null : onRemoveLast,
-                    child: const Text('Remove last player'),
+                  child: CheckboxListTile(
+                    value: checked,
+                    onChanged: (value) => onToggle(player, value ?? false),
+                    title: Text(
+                      player,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: disabled ? Colors.grey : null,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    secondary: IconButton(
+                      onPressed: () => onDelete(player),
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Remove player',
+                    ),
                   ),
-                ],
+                );
+              }),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onAddNew,
+                icon: const Icon(Icons.add_circle_outline),
+                label: const Text('➕ Add New Player'),
               ),
             ),
           ],
