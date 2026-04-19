@@ -75,9 +75,6 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
         return selected;
       }
     }
-    if (selected.isEmpty) {
-      selected.addAll(squad.take(_maxSelectedPlayers));
-    }
     return selected;
   }
 
@@ -255,8 +252,8 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
       );
       return;
     }
-    final team1 = _team1Squad.where(_team1Selected.contains).toList();
-    final team2 = _team2Squad.where(_team2Selected.contains).toList();
+    final team1 = _team1Squad.where((player) => _team1Selected.contains(player)).toList();
+    final team2 = _team2Squad.where((player) => _team2Selected.contains(player)).toList();
     ref.read(matchSetupProvider.notifier).updateTeamPlayers(
       team1Players: team1,
       team2Players: team2,

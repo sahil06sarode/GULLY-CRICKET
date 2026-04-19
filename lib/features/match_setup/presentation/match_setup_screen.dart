@@ -15,6 +15,8 @@ class MatchSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
+  static const String _defaultTeamAName = 'Team A';
+  static const String _defaultTeamBName = 'Team B';
   late final TextEditingController _team1Controller;
   late final TextEditingController _team2Controller;
   late int _totalOvers;
@@ -48,10 +50,10 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
         _team2PresetPlayers = team.playerNames.where((name) => name.trim().isNotEmpty).toList();
       }
     }
-    if (_team1SavedId == null) {
+    if (_team1SavedId == null && team1Lookup == _defaultTeamAName.toLowerCase()) {
       _team1Controller.text = '';
     }
-    if (_team2SavedId == null) {
+    if (_team2SavedId == null && team2Lookup == _defaultTeamBName.toLowerCase()) {
       _team2Controller.text = '';
     }
     _totalOvers = config.totalOvers;
