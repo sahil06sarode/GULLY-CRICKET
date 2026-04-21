@@ -91,7 +91,7 @@ class _PadButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
-    this.minHeight = 56,
+    this.minHeight = 62,
   });
 
   final String label;
@@ -101,16 +101,23 @@ class _PadButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = ThemeData.estimateBrightnessForColor(color);
+    final foreground = brightness == Brightness.dark ? Colors.white : Colors.black87;
     return SizedBox(
       height: minHeight,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
-          minimumSize: const Size(56, 56),
+          foregroundColor: foreground,
+          minimumSize: const Size(64, 64),
+          tapTargetSize: MaterialTapTargetSize.padded,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         onPressed: onTap,
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        child: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
       ),
     );
   }

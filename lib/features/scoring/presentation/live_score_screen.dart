@@ -1107,13 +1107,27 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
 
     final allBalls = _currentOverBalls(innings);
     final partnershipInfo = _matchEngine.currentPartnership(innings);
-    final partnershipText = 'Partner: ${partnershipInfo.runs}(${partnershipInfo.balls})';
     final oversText = _oversText(innings, match);
     final crr = _currentRunRate(innings, match);
     final rrr = _requiredRunRate(innings, match);
     final targetNeedText = _targetNeedText(innings, match);
     final projectedText = _projectionText(innings, match);
     final thisOverLabels = allBalls.map(_deliveryLabel).toList();
+    final totalBalls = match.rules.totalOvers * match.rules.ballsPerOver;
+    final legalBalls = innings.legalBallsCount();
+    final ballsRemaining = (totalBalls - legalBalls).clamp(0, totalBalls);
+    final target = match.target;
+    final runsNeeded = target == null ? 0 : (target - innings.totalRuns).clamp(0, target);
+    final quickInfoChips = <String>[
+      'Partnership ${partnershipInfo.runs}(${partnershipInfo.balls})',
+      'Ov $oversText',
+      'CRR ${crr.toStringAsFixed(1)}',
+      if (target != null && innings.inningsNumber == 2) ...<String>[
+        'RRR ${rrr.toStringAsFixed(1)}',
+        'Need $runsNeeded off $ballsRemaining',
+      ] else
+        projectedText,
+    ];
 
     return Scaffold(
       body: SafeArea(
@@ -1260,64 +1274,69 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                           ],
                         ),
                 ),
-                SizedBox(
-                  height: 48,
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
-                    child: QuickActionBar(
-                      partnership: partnershipText,
-                      onSwap: () async {
-                        final strikerId = innings.currentBatsmanId;
-                        final nonId = innings.currentNonStrikerId;
-                        if (strikerId == null || nonId == null) return;
-                        await ref.read(activeMatchProvider.notifier).swapStrike();
-                        await _broadcastIfHosting();
-                      },
-                      onSettings: () async {
-                        await showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          showDragHandle: true,
-                          builder: (context) => Padding(
-                            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                            child: SafeArea(
-                              child: ValueListenableBuilder<Box<dynamic>>(
-                                valueListenable:
-                                    Hive.box<dynamic>(
-                                      HiveKeys.settingsBox,
-                                    ).listenable(keys: const <String>['sound_enabled']),
-                                builder: (context, settings, _) {
-                                  final soundEnabled =
-                                      (settings.get('sound_enabled', defaultValue: true) as bool?) ??
-                                      true;
-                                  return ListView(
-                                    shrinkWrap: true,
-                                    children: <Widget>[
-                                      const ListTile(title: Text('Match Settings')),
-                                      ListTile(title: Text('Overs: ${match.rules.totalOvers}')),
-                                      ListTile(title: Text('Balls/Over: ${match.rules.ballsPerOver}')),
-                                      ListTile(
-                                        title: Text(
-                                          'Players: ${match.rules.team1Players} vs ${match.rules.team2Players}',
-                                        ),
+                Padding(
+                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
+                  child: QuickActionBar(
+                    infoChips: quickInfoChips,
+                    onSwap: () async {
+                      final strikerId = innings.currentBatsmanId;
+                      final nonId = innings.currentNonStrikerId;
+                      if (strikerId == null || nonId == null) return;
+                      await ref.read(activeMatchProvider.notifier).swapStrike();
+                      await _broadcastIfHosting();
+                    },
+                    onSelectStriker: () async {
+                      await _selectNextBatsman(striker: true);
+                      await _broadcastIfHosting();
+                    },
+                    onSelectBowler: () async {
+                      await _selectNextBowler();
+                      await _broadcastIfHosting();
+                    },
+                    onSettings: () async {
+                      await showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        showDragHandle: true,
+                        builder: (context) => Padding(
+                          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+                          child: SafeArea(
+                            child: ValueListenableBuilder<Box<dynamic>>(
+                              valueListenable:
+                                  Hive.box<dynamic>(
+                                    HiveKeys.settingsBox,
+                                  ).listenable(keys: const <String>['sound_enabled']),
+                              builder: (context, settings, _) {
+                                final soundEnabled =
+                                    (settings.get('sound_enabled', defaultValue: true) as bool?) ??
+                                    true;
+                                return ListView(
+                                  shrinkWrap: true,
+                                  children: <Widget>[
+                                    const ListTile(title: Text('Match Settings')),
+                                    ListTile(title: Text('Overs: ${match.rules.totalOvers}')),
+                                    ListTile(title: Text('Balls/Over: ${match.rules.ballsPerOver}')),
+                                    ListTile(
+                                      title: Text(
+                                        'Players: ${match.rules.team1Players} vs ${match.rules.team2Players}',
                                       ),
-                                      SwitchListTile(
-                                        title: const Text('Sound Effects'),
-                                        value: soundEnabled,
-                                        onChanged: (value) async {
-                                          await ref.read(soundServiceProvider).setEnabled(value);
-                                        },
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
+                                    ),
+                                    SwitchListTile(
+                                      title: const Text('Sound Effects'),
+                                      value: soundEnabled,
+                                      onChanged: (value) async {
+                                        await ref.read(soundServiceProvider).setEnabled(value);
+                                      },
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ),
-                        );
-                      },
-                      onWifi: _showWifiInfo,
-                    ),
+                        ),
+                      );
+                    },
+                    onWifi: _showWifiInfo,
                   ),
                 ),
               ],
