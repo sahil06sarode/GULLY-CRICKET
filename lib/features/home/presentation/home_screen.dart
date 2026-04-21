@@ -135,7 +135,7 @@ class HomeScreen extends StatelessWidget {
                     .animate()
                     .slideY(begin: 0.22, end: 0, duration: 300.ms, delay: 400.ms)
                     .fadeIn(delay: 400.ms, duration: 300.ms),
-                const Spacer(),
+                const SizedBox(height: 24),
                 const Align(
                   alignment: Alignment.center,
                   child: BannerAdWidget(),

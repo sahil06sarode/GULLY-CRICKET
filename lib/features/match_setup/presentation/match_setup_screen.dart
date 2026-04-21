@@ -29,6 +29,17 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
   List<String> _team1PresetPlayers = const <String>[];
   List<String> _team2PresetPlayers = const <String>[];
 
+  int _resolvePlayerCount({
+    required List<String> players,
+    required int fallback,
+  }) {
+    if (players.isEmpty) return fallback;
+    final count = players.length;
+    if (count < 1) return 1;
+    if (count > 11) return 11;
+    return count;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -58,8 +69,14 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
     _team2Controller = TextEditingController(text: team2Initial);
     _totalOvers = config.totalOvers;
     _ballsPerOver = config.ballsPerOver;
-    _team1PlayerCount = config.team1PlayerCount;
-    _team2PlayerCount = config.team2PlayerCount;
+    _team1PlayerCount = _resolvePlayerCount(
+      players: _team1PresetPlayers,
+      fallback: config.team1PlayerCount,
+    );
+    _team2PlayerCount = _resolvePlayerCount(
+      players: _team2PresetPlayers,
+      fallback: config.team2PlayerCount,
+    );
     _enableToss = config.enableToss;
   }
 
@@ -127,10 +144,18 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
         _team1SavedId = team.id;
         _team1Controller.text = team.name;
         _team1PresetPlayers = players;
+        _team1PlayerCount = _resolvePlayerCount(
+          players: players,
+          fallback: _team1PlayerCount,
+        );
       } else {
         _team2SavedId = team.id;
         _team2Controller.text = team.name;
         _team2PresetPlayers = players;
+        _team2PlayerCount = _resolvePlayerCount(
+          players: players,
+          fallback: _team2PlayerCount,
+        );
       }
     });
   }

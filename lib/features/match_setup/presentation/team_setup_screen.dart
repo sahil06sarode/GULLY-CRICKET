@@ -14,11 +14,12 @@ class TeamSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
-  static const int _maxSelectedPlayers = 15;
   late List<String> _team1Squad;
   late List<String> _team2Squad;
   late Set<String> _team1Selected;
   late Set<String> _team2Selected;
+  late int _team1RequiredCount;
+  late int _team2RequiredCount;
 
   @override
   void initState() {
@@ -27,12 +28,22 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
     final teams = ref.read(teamsProvider);
     final team1Model = _findTeamByName(config.team1Name, teams);
     final team2Model = _findTeamByName(config.team2Name, teams);
+    _team1RequiredCount = config.team1PlayerCount;
+    _team2RequiredCount = config.team2PlayerCount;
 
     _team1Squad = _sanitizePlayers(team1Model?.playerNames ?? config.team1Players);
     _team2Squad = _sanitizePlayers(team2Model?.playerNames ?? config.team2Players);
 
-    _team1Selected = _deriveInitialSelection(config.team1Players, _team1Squad);
-    _team2Selected = _deriveInitialSelection(config.team2Players, _team2Squad);
+    _team1Selected = _deriveInitialSelection(
+      config.team1Players,
+      _team1Squad,
+      maxSelection: _team1RequiredCount,
+    );
+    _team2Selected = _deriveInitialSelection(
+      config.team2Players,
+      _team2Squad,
+      maxSelection: _team2RequiredCount,
+    );
   }
 
   TeamModel? _findTeamByName(String teamName, List<TeamModel> teams) {
@@ -59,7 +70,11 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
     return result;
   }
 
-  Set<String> _deriveInitialSelection(List<String> preferred, List<String> squad) {
+  Set<String> _deriveInitialSelection(
+    List<String> preferred,
+    List<String> squad, {
+    required int maxSelection,
+  }) {
     final selected = <String>{};
     final squadLookup = <String, String>{
       for (final name in squad) name.toLowerCase(): name,
@@ -71,7 +86,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
       if (matched != null) {
         selected.add(matched);
       }
-      if (selected.length == _maxSelectedPlayers) {
+      if (selected.length == maxSelection) {
         return selected;
       }
     }
@@ -221,10 +236,13 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
     required bool checked,
   }) {
     final selected = isTeam1 ? _team1Selected : _team2Selected;
-    if (checked && selected.length >= _maxSelectedPlayers) {
+    final requiredCount = isTeam1 ? _team1RequiredCount : _team2RequiredCount;
+    if (checked && selected.length >= requiredCount) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Maximum 15 players allowed')));
+      ).showSnackBar(
+        SnackBar(content: Text('Maximum $requiredCount players allowed')),
+      );
       return;
     }
     setState(() {
@@ -245,10 +263,15 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
   }
 
   Future<void> _savePlayersAndNavigate() async {
-    if (_team1Selected.length != _maxSelectedPlayers ||
-        _team2Selected.length != _maxSelectedPlayers) {
+    if (_team1Selected.length != _team1RequiredCount ||
+        _team2Selected.length != _team2RequiredCount) {
+      final config = ref.read(matchSetupProvider);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select exactly 15 players for each team')),
+        SnackBar(
+          content: Text(
+            'Select exactly ${config.team1PlayerCount} players for ${config.team1Name} and ${config.team2PlayerCount} for ${config.team2Name}',
+          ),
+        ),
       );
       return;
     }
@@ -274,6 +297,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
             children: <Widget>[
               _TeamSquadCard(
                 teamName: config.team1Name,
+                requiredCount: _team1RequiredCount,
                 squad: _team1Squad,
                 selected: _team1Selected,
                 onToggle: (player, checked) =>
@@ -284,6 +308,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
               const SizedBox(height: 16),
               _TeamSquadCard(
                 teamName: config.team2Name,
+                requiredCount: _team2RequiredCount,
                 squad: _team2Squad,
                 selected: _team2Selected,
                 onToggle: (player, checked) =>
@@ -309,10 +334,14 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      Expanded(child: Text('${config.team1Name}: ${_team1Selected.length} / 15 selected')),
                       Expanded(
                         child: Text(
-                          '${config.team2Name}: ${_team2Selected.length} / 15 selected',
+                          '${config.team1Name}: ${_team1Selected.length} / $_team1RequiredCount selected',
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${config.team2Name}: ${_team2Selected.length} / $_team2RequiredCount selected',
                           textAlign: TextAlign.end,
                         ),
                       ),
@@ -340,6 +369,7 @@ class _TeamSetupScreenState extends ConsumerState<TeamSetupScreen> {
 class _TeamSquadCard extends StatelessWidget {
   const _TeamSquadCard({
     required this.teamName,
+    required this.requiredCount,
     required this.squad,
     required this.selected,
     required this.onToggle,
@@ -348,6 +378,7 @@ class _TeamSquadCard extends StatelessWidget {
   });
 
   final String teamName;
+  final int requiredCount;
   final List<String> squad;
   final Set<String> selected;
   final void Function(String playerName, bool checked) onToggle;
@@ -356,7 +387,7 @@ class _TeamSquadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isComplete = selected.length == _TeamSetupScreenState._maxSelectedPlayers;
+    final isComplete = selected.length == requiredCount;
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -385,7 +416,7 @@ class _TeamSquadCard extends StatelessWidget {
                     color: isComplete ? Colors.green.withOpacity(0.15) : null,
                   ),
                   child: Text(
-                    '${selected.length} / 15 selected',
+                    '${selected.length} / $requiredCount selected',
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       color: isComplete ? Colors.green.shade700 : null,

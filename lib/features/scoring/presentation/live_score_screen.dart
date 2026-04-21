@@ -152,7 +152,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
           team1Name: battingTeam,
           team1Score: '${innings.totalRuns}/${innings.wickets}',
           team1Overs: '${legalBalls ~/ ballsPerOver}.${legalBalls % ballsPerOver} ov',
-          team2Score: innings.inningsNumber == 1 ? null : '${match.firstInnings?.score ?? '-'}',
+          team2Score: innings.inningsNumber == 1 ? null : (match.firstInnings?.score ?? '-'),
           team2Overs: innings.inningsNumber == 1 ? null : 'Target ${match.target ?? '-'}',
           currentEvent: '',
           battingTeam: battingTeam,
@@ -986,6 +986,103 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
     );
   }
 
+  Widget _buildTopControls({required bool compact}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              IconButton(
+                onPressed: () {
+                  _showTopSnackBar('Menu coming soon');
+                },
+                icon: const Icon(Icons.menu),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+                ),
+                child: const Text(
+                  'LIVE',
+                  style: TextStyle(fontWeight: FontWeight.w700, letterSpacing: 0.6),
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Match summary',
+                onPressed: () => context.push('/result'),
+                icon: const Icon(Icons.bar_chart),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ToggleButtons(
+                    isSelected: <bool>[
+                      _scoreboardStyle == 'simple',
+                      _scoreboardStyle == 'official',
+                    ],
+                    borderRadius: BorderRadius.circular(10),
+                    constraints: BoxConstraints(
+                      minHeight: 34,
+                      minWidth: compact ? 54 : 70,
+                    ),
+                    onPressed: (index) {
+                      _setScoreboardStyle(index == 0 ? 'simple' : 'official');
+                    },
+                    children: <Widget>[
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 8),
+                        child: Text(compact ? 'Simple' : '📊 Simple'),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 8),
+                        child: Text(compact ? 'Official' : '🏆 Official'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              compact
+                  ? IconButton(
+                      tooltip: _notifEnabled ? 'Notifications on' : 'Notifications off',
+                      onPressed: () => _setNotifEnabled(!_notifEnabled),
+                      icon: Icon(
+                        _notifEnabled
+                            ? Icons.notifications_active_outlined
+                            : Icons.notifications_off_outlined,
+                      ),
+                    )
+                  : TextButton.icon(
+                      onPressed: () => _setNotifEnabled(!_notifEnabled),
+                      icon: Icon(
+                        _notifEnabled
+                            ? Icons.notifications_active_outlined
+                            : Icons.notifications_off_outlined,
+                      ),
+                      label: Text(_notifEnabled ? 'Alerts On' : 'Alerts Off'),
+                    ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final match = ref.watch(activeMatchProvider);
@@ -1025,67 +1122,10 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
           children: <Widget>[
             Column(
               children: <Widget>[
-                SizedBox(
-                  height: 48,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Row(
-                      children: <Widget>[
-                        IconButton(
-                          onPressed: () {
-                            _showTopSnackBar('Menu coming soon');
-                          },
-                          icon: const Icon(Icons.menu),
-                        ),
-                        const Expanded(
-                          child: Center(child: Text('LIVE', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
-                        ),
-                        DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Colors.white10,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ToggleButtons(
-                            isSelected: <bool>[
-                              _scoreboardStyle == 'simple',
-                              _scoreboardStyle == 'official',
-                            ],
-                            borderRadius: BorderRadius.circular(8),
-                            constraints: const BoxConstraints(minHeight: 30, minWidth: 72),
-                            onPressed: (index) {
-                              _setScoreboardStyle(index == 0 ? 'simple' : 'official');
-                            },
-                            children: const <Widget>[
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 6),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[Text('📊'), SizedBox(width: 4), Text('Simple')],
-                                ),
-                              ),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 6),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[Text('🏆'), SizedBox(width: 4), Text('Official')],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        TextButton(
-                          onPressed: () => _setNotifEnabled(!_notifEnabled),
-                          child: Text('🔔 ${_notifEnabled ? 'Notif ON' : 'Notif OFF'}'),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () => context.push('/result'),
-                          icon: const Icon(Icons.bar_chart),
-                        ),
-                      ],
-                    ),
-                  ),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return _buildTopControls(compact: constraints.maxWidth < 440);
+                  },
                 ),
                 Expanded(
                   child: _scoreboardStyle == 'official'
@@ -1144,42 +1184,39 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
                         )
                       : Column(
                           children: <Widget>[
-                            SizedBox(
-                              height: 120,
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 96),
                               child: ScoreboardHeader(match: match, innings: innings),
                             ),
-                            SizedBox(
-                              height: 96,
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                                child: Column(
-                                  children: <Widget>[
-                                    _PlayerLine(
-                                      icon: '🟢',
-                                      name: '${striker?.name ?? 'Select striker'}*',
-                                      stats:
-                                          '${striker?.runsScored ?? 0}(${striker?.ballsFaced ?? 0})  SR: ${(striker?.strikeRate ?? 0).toStringAsFixed(0)}',
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _PlayerLine(
-                                      icon: '🔵',
-                                      name: nonStriker?.name ?? 'Select non-striker',
-                                      stats:
-                                          '${nonStriker?.runsScored ?? 0}(${nonStriker?.ballsFaced ?? 0})  SR: ${(nonStriker?.strikeRate ?? 0).toStringAsFixed(0)}',
-                                    ),
-                                    const SizedBox(height: 6),
-                                    _PlayerLine(
-                                      icon: '🎯',
-                                      name: bowler?.name ?? 'Select bowler',
-                                      stats:
-                                          '${bowlerFigures.oversText}-${bowlerFigures.maidens}-${bowlerFigures.runs}-${bowlerFigures.wickets}  Eco: ${bowlerFigures.economy.toStringAsFixed(1)}',
-                                    ),
-                                  ],
-                                ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                              child: Column(
+                                children: <Widget>[
+                                  _PlayerLine(
+                                    icon: '🟢',
+                                    name: '${striker?.name ?? 'Select striker'}*',
+                                    stats:
+                                        '${striker?.runsScored ?? 0}(${striker?.ballsFaced ?? 0})  SR: ${(striker?.strikeRate ?? 0).toStringAsFixed(0)}',
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _PlayerLine(
+                                    icon: '🔵',
+                                    name: nonStriker?.name ?? 'Select non-striker',
+                                    stats:
+                                        '${nonStriker?.runsScored ?? 0}(${nonStriker?.ballsFaced ?? 0})  SR: ${(nonStriker?.strikeRate ?? 0).toStringAsFixed(0)}',
+                                  ),
+                                  const SizedBox(height: 6),
+                                  _PlayerLine(
+                                    icon: '🎯',
+                                    name: bowler?.name ?? 'Select bowler',
+                                    stats:
+                                        '${bowlerFigures.oversText}-${bowlerFigures.maidens}-${bowlerFigures.runs}-${bowlerFigures.wickets}  Eco: ${bowlerFigures.economy.toStringAsFixed(1)}',
+                                  ),
+                                ],
                               ),
                             ),
                             SizedBox(
-                              height: 52,
+                              height: 56,
                               child: SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: BallTimeline(balls: allBalls),
@@ -1288,7 +1325,7 @@ class _LiveScoreScreenState extends ConsumerState<LiveScoreScreen> {
             if (_showWicketFlash)
               Positioned.fill(
                 child: IgnorePointer(
-                  child: Container(color: AppColors.wicketRed.withOpacity(0.1)),
+                  child: Container(color: AppColors.wicketRed.withValues(alpha: 0.1)),
                 ),
               ),
           ],
@@ -1312,14 +1349,31 @@ class _PlayerLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(icon),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(icon),
+        ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            '$name   $stats',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                stats,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ),
         ),
       ],

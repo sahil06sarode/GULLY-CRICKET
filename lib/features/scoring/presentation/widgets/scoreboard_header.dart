@@ -42,34 +42,63 @@ class _ScoreboardHeaderState extends State<ScoreboardHeader> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '$battingTeamName: ${widget.innings.score}',
-              key: ValueKey<int>(widget.innings.totalRuns),
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontSize: 48,
-                    fontWeight: FontWeight.bold,
-                  ),
-            )
-                .animate()
-                .scale(begin: const Offset(1, 1), end: const Offset(1.3, 1.3), duration: 100.ms)
-                .then()
-                .scale(begin: const Offset(1.3, 1.3), end: const Offset(1, 1), duration: 100.ms)
-                .shimmer(color: AppColors.accentGold, duration: 180.ms),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  battingTeamName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                widget.innings.score,
+                key: ValueKey<int>(widget.innings.totalRuns),
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontSize: 38,
+                      fontWeight: FontWeight.bold,
+                    ),
+              )
+                  .animate()
+                  .scale(begin: const Offset(1, 1), end: const Offset(1.3, 1.3), duration: 100.ms)
+                  .then()
+                  .scale(begin: const Offset(1.3, 1.3), end: const Offset(1, 1), duration: 100.ms)
+                  .shimmer(color: AppColors.accentGold, duration: 180.ms),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text('● $overText Overs   •   CRR: ${crr.toStringAsFixed(1)}'),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 4,
+            children: <Widget>[
+              Text('Overs: $overText'),
+              Text('CRR: ${crr.toStringAsFixed(1)}'),
+            ],
+          ),
           if (target != null) ...<Widget>[
             const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Target: $target  |  Need: $runsNeeded off $safeBallsRemaining  |  RRR: ${rrr.toStringAsFixed(1)}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-              ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: <Widget>[
+                Text(
+                  'Target: $target',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                ),
+                Text(
+                  'Need: $runsNeeded off $safeBallsRemaining',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                ),
+                Text(
+                  'RRR: ${rrr.toStringAsFixed(1)}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
             ),
           ],
         ],

@@ -57,85 +57,154 @@ class OfficialScoreboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const mono = TextStyle(fontFamily: 'monospace');
-    return Column(
-      children: <Widget>[
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          color: Colors.black87,
-          child: const Text(
-            'GULLY CRICKET — LIVE',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-          ),
+    final topPanels = <Widget>[
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        color: Colors.black87,
+        child: const Text(
+          'GULLY CRICKET — LIVE',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(
-                      '$battingTeamName  $scoreText',
-                      style: mono.copyWith(fontWeight: FontWeight.w700, fontSize: 15),
-                    ),
+      ),
+      _panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    battingTeamName,
+                    style: mono.copyWith(fontWeight: FontWeight.w700, fontSize: 16),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  Text('Ov: $oversText', style: mono),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(targetNeedText, style: mono),
-            ],
-          ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  scoreText,
+                  style: mono.copyWith(fontWeight: FontWeight.w700, fontSize: 18),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 10,
+              runSpacing: 4,
+              children: <Widget>[
+                Text('Ov: $oversText', style: mono),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              targetNeedText,
+              style: mono,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              softWrap: true,
+            ),
+          ],
         ),
-        _panel(
-          child: Column(
+      ),
+      _panel(
+        child: Column(
+          children: <Widget>[
+            _headerRow('BATTER', 'R', 'B', 'SR', mono),
+            const SizedBox(height: 4),
+            _dataRow(
+              '● $strikerName*',
+              '$strikerRuns',
+              '$strikerBalls',
+              strikerStrikeRate.toStringAsFixed(1),
+              mono,
+            ),
+            const SizedBox(height: 2),
+            _dataRow(
+              '  $nonStrikerName',
+              '$nonStrikerRuns',
+              '$nonStrikerBalls',
+              nonStrikerStrikeRate.toStringAsFixed(1),
+              mono,
+            ),
+          ],
+        ),
+      ),
+      _panel(
+        child: Column(
+          children: <Widget>[
+            _headerRow('BOWLER', 'O', 'R', 'W', mono, trailingHeader: 'Eco'),
+            const SizedBox(height: 4),
+            _dataRow(
+              bowlerName,
+              bowlerOvers,
+              '$bowlerRuns',
+              '$bowlerWickets',
+              mono,
+              trailing: bowlerEconomy.toStringAsFixed(1),
+            ),
+          ],
+        ),
+      ),
+      _panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              'THIS OVER: ${thisOverLabels.join('  ')}',
+              style: mono.copyWith(fontWeight: FontWeight.w600),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$partnershipText  ·  CRR: $crrText',
+              style: mono,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'RRR: $rrrText  ·  $projectionText',
+              style: mono,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+      _panel(child: lastOversSection),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compactHeight = constraints.maxHeight < 760;
+        if (compactHeight) {
+          final scorePadHeight = (constraints.maxHeight * 0.42).clamp(220.0, 340.0).toDouble();
+          return Column(
             children: <Widget>[
-              _headerRow('BATTER', 'R', 'B', 'SR', mono),
-              const SizedBox(height: 4),
-              _dataRow('● $strikerName*', '$strikerRuns', '$strikerBalls',
-                  strikerStrikeRate.toStringAsFixed(1), mono),
-              const SizedBox(height: 2),
-              _dataRow('  $nonStrikerName', '$nonStrikerRuns', '$nonStrikerBalls',
-                  nonStrikerStrikeRate.toStringAsFixed(1), mono),
-            ],
-          ),
-        ),
-        _panel(
-          child: Column(
-            children: <Widget>[
-              _headerRow('BOWLER', 'O', 'R', 'W', mono, trailingHeader: 'Eco'),
-              const SizedBox(height: 4),
-              _dataRow(
-                bowlerName,
-                bowlerOvers,
-                '$bowlerRuns',
-                '$bowlerWickets',
-                mono,
-                trailing: bowlerEconomy.toStringAsFixed(1),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(children: topPanels),
+                ),
+              ),
+              SizedBox(
+                height: scorePadHeight,
+                child: scorePad,
               ),
             ],
-          ),
-        ),
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                'THIS OVER: ${thisOverLabels.join('  ')}',
-                style: mono.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              Text('$partnershipText  ·  CRR: $crrText', style: mono),
-              const SizedBox(height: 2),
-              Text('RRR: $rrrText  ·  $projectionText', style: mono),
-            ],
-          ),
-        ),
-        _panel(child: lastOversSection),
-        Expanded(child: scorePad),
-      ],
+          );
+        }
+
+        return Column(
+          children: <Widget>[
+            ...topPanels,
+            Expanded(child: scorePad),
+          ],
+        );
+      },
     );
   }
 
