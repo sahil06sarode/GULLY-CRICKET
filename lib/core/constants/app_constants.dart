@@ -4,9 +4,9 @@ class AppConstants {
   static const appName = 'Gully Cricket';
   static const wsPort = 4040;
   static const wsPath = '/cricket';
-  static const adBannerIdAndroid = 'ca-app-pub-3940256099942544/6300978111';
+  static const adBannerIdAndroid = 'ca-app-pub-5679157789923101/6657645981';
   static const adInterstitialIdAndroid =
-      'ca-app-pub-3940256099942544/1033173712';
+      'ca-app-pub-5679157789923101/3252014752';
   static const adBannerIdIOS = 'ca-app-pub-3940256099942544/2934735716';
   static const adInterstitialIdIOS =
       'ca-app-pub-3940256099942544/4411468910';
